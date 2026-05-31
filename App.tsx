@@ -1,20 +1,53 @@
+import React from 'react';
+import { Platform, StyleSheet, LogBox } from 'react-native';
+
+LogBox.ignoreLogs([
+  'props.pointerEvents is deprecated',
+  '"shadow*" style props are deprecated',
+]);
+
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import {
+  useFonts,
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from '@expo-google-fonts/inter';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { RootNavigator } from './src/navigation/RootNavigator';
+import { AchievementToast } from './src/components/shared/AchievementToast';
+import { useAchievementStore } from './src/store/useAchievementStore';
+
+function GlobalOverlays() {
+  const { pendingUnlock, clearPendingUnlock } = useAchievementStore();
+  return <AchievementToast achievement={pendingUnlock} onHide={clearPendingUnlock} />;
+}
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+  });
+
+  if (!fontsLoaded && !fontError && Platform.OS !== 'web') {
+    return null;
+  }
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <StatusBar style="light" />
+        <RootNavigator />
+        <GlobalOverlays />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  root: { flex: 1, backgroundColor: '#050505' },
 });
