@@ -11,23 +11,35 @@ import { AText } from '../components/ui/AText';
 import { CircularProgress } from '../components/shared/CircularProgress';
 import { XPBar } from '../components/shared/XPBar';
 import { QuestCard } from '../components/shared/QuestCard';
-import { ModePickerSheet } from '../components/shared/ModePickerSheet';
 import { RankUpOverlay } from '../components/shared/RankUpOverlay';
 import { DailyChallengeCard } from '../components/shared/DailyChallengeCard';
+import { DailyCompletionSheet } from '../components/shared/DailyCompletionSheet';
 import { useUserStore } from '../store/useUserStore';
 import { useTaskStore } from '../store/useTaskStore';
 import { useFocusStore } from '../store/useFocusStore';
+import { useAchievementStore } from '../store/useAchievementStore';
+import { useStatsStore } from '../store/useStatsStore';
 import { getRankThreshold, getNextRankThreshold } from '../utils/xp';
 import { haptics } from '../utils/haptics';
-import { MainTabParamList, FocusMode } from '../types';
+import { MainTabParamList, FocusMode, Task } from '../types';
+
+// Derive focus mode from a task's estimated duration
+function modeFromDuration(minutes?: number): FocusMode {
+  if (!minutes || minutes <= 25) return 'sprint';
+  if (minutes <= 60)             return 'flow';
+  return 'deep';
+}
 
 export function DashboardScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
-  const { profile, rank, rankProgress, pendingRankUp, clearRankUp, comboMultiplier, comboCount } = useUserStore();
-  const { todaysTasks, completedToday, completionRateToday, xpEarnedToday } = useTaskStore();
+  const { profile, rank, rankProgress, pendingRankUp, clearRankUp, comboMultiplier, comboCount,
+          addXP, incrementTasksCompleted, incrementCombo } = useUserStore();
+  const { todaysTasks, completedToday, completionRateToday, xpEarnedToday, completeTask } = useTaskStore();
   const { setPendingTask } = useFocusStore();
+  const { checkAchievements } = useAchievementStore();
+  const { recordActivity, deepWorkSessions } = useStatsStore();
 
-  const [pickerTask, setPickerTask] = useState<{ id: string; title: string } | null>(null);
+  const [showCompletionDetail, setShowCompletionDetail] = useState(false);
 
   const rankInfo       = getRankThreshold(rank);
   const nextRank       = getNextRankThreshold(rank);
@@ -54,16 +66,33 @@ export function DashboardScreen() {
 
   const streakDangerStyle = useAnimatedStyle(() => ({ opacity: dangerOpacity.value }));
 
-  function handleStartTask(taskId: string, taskTitle: string) {
+  // Tap quest card → derive mode from its duration, start immediately
+  function handleStartTask(task: Task) {
     haptics.light();
-    setPickerTask({ id: taskId, title: taskTitle });
+    const mode = modeFromDuration(task.estimatedMinutes);
+    setPendingTask(task.id, task.title, mode);
+    navigation.navigate('Focus');
   }
 
-  function handleModeSelected(mode: FocusMode) {
-    if (!pickerTask) return;
-    setPendingTask(pickerTask.id, pickerTask.title, mode);
-    setPickerTask(null);
-    navigation.navigate('Focus');
+  // Checkmark button → complete the task in-place
+  function handleCompleteTask(taskId: string) {
+    haptics.success();
+    const baseXp  = completeTask(taskId, profile.currentStreak);
+    const earned  = Math.round(baseXp * comboMultiplier);
+    addXP(earned);
+    incrementTasksCompleted();
+    incrementCombo();
+    recordActivity({ xpEarned: earned, tasksCompleted: 1, streakDay: profile.currentStreak });
+    checkAchievements({
+      totalTasks:       profile.tasksCompleted + 1,
+      currentStreak:    profile.currentStreak,
+      longestStreak:    profile.longestStreak,
+      rank,
+      focusMinutes:     profile.focusMinutesTotal,
+      todayTasks:       completedToday().length + 1,
+      completionHour:   new Date().getHours(),
+      deepWorkSessions,
+    });
   }
 
   return (
@@ -142,8 +171,11 @@ export function DashboardScreen() {
           </View>
         </View>
 
-        {/* Daily Completion Card */}
-        <View style={styles.completionCard}>
+        {/* Daily Completion Card — tap to open detail sheet */}
+        <Pressable
+          style={styles.completionCard}
+          onPress={() => { haptics.light(); setShowCompletionDetail(true); }}
+        >
           <View style={styles.completionTop}>
             <View style={styles.completionLeft}>
               <View style={styles.completionIcon}><Ionicons name="calendar-outline" size={22} color={colors.primary.default} /></View>
@@ -164,7 +196,7 @@ export function DashboardScreen() {
             <View style={[styles.completionStat, styles.completionStatBordered]}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>Total</AText><AText variant="subheading" weight="bold">{totalToday}</AText></View>
             <View style={styles.completionStat}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>XP Today</AText><AText variant="subheading" weight="bold" style={{ color: colors.primary.default }}>+{todayXP}</AText></View>
           </View>
-        </View>
+        </Pressable>
 
         {/* Daily Challenge */}
         <DailyChallengeCard />
@@ -177,7 +209,12 @@ export function DashboardScreen() {
           </View>
           <View style={styles.questList}>
             {activeTasks.slice(0, 3).map((task) => (
-              <QuestCard key={task.id} task={task} onStart={() => handleStartTask(task.id, task.title)} />
+              <QuestCard
+                key={task.id}
+                task={task}
+                onStart={() => handleStartTask(task)}
+                onComplete={() => handleCompleteTask(task.id)}
+              />
             ))}
             {activeTasks.length === 0 && (
               <View style={styles.emptyState}>
@@ -204,8 +241,8 @@ export function DashboardScreen() {
         <View style={{ height: spacing[12] }} />
       </ScrollView>
 
-      <ModePickerSheet visible={!!pickerTask} taskTitle={pickerTask?.title ?? ''} onSelect={handleModeSelected} onClose={() => setPickerTask(null)} />
       <RankUpOverlay rank={pendingRankUp ?? 'E'} visible={pendingRankUp !== null} onDismiss={clearRankUp} />
+      <DailyCompletionSheet visible={showCompletionDetail} onClose={() => setShowCompletionDetail(false)} />
     </SafeAreaView>
   );
 }

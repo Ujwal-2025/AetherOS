@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, Pressable, Platform } from 'react-native';
+import { StyleSheet, Pressable, Platform } from 'react-native';
+import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontFamily } from '../../theme';
 import { AText } from '../ui/AText';
@@ -8,10 +9,10 @@ import { Task, TaskPriority, TaskCategory } from '../../types';
 // ─── Meta maps ────────────────────────────────────────────────────────────────
 
 const PRIORITY_META: Record<TaskPriority, { color: string; label: string }> = {
-  low:      { color: colors.text.muted,       label: 'LOW' },
-  medium:   { color: colors.secondary.default, label: 'MED' },
-  high:     { color: colors.primary.default,  label: 'HIGH' },
-  critical: { color: colors.danger.default,   label: 'CRIT' },
+  low:      { color: colors.text.muted,        label: 'LOW' },
+  medium:   { color: colors.secondary.default,  label: 'MED' },
+  high:     { color: colors.primary.default,   label: 'HIGH' },
+  critical: { color: colors.danger.default,    label: 'CRIT' },
 };
 
 const CATEGORY_ICONS: Record<TaskCategory, keyof typeof Ionicons.glyphMap> = {
@@ -25,22 +26,31 @@ const CATEGORY_ICONS: Record<TaskCategory, keyof typeof Ionicons.glyphMap> = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface QuestCardProps {
-  task:       Task;
-  onStart?:   () => void;
-  onComplete?: () => void;
+  task:        Task;
+  onStart?:    () => void;  // whole-card tap → start focus session
+  onComplete?: () => void;  // checkmark button → mark done
   onDelete?:   () => void;
 }
 
-export function QuestCard({ task, onStart, onComplete, onDelete }: QuestCardProps) {
-  const pm = PRIORITY_META[task.priority];
+export function QuestCard({ task, onStart, onComplete }: QuestCardProps) {
+  const pm          = PRIORITY_META[task.priority];
   const isCompleted = task.status === 'completed';
 
   const glowStyle = !isCompleted && Platform.OS === 'web'
     ? { boxShadow: `0 0 0 1px ${pm.color}18` }
     : {};
 
+  // Whole-card press starts a focus session; no-op when completed or no handler
+  function handleCardPress() {
+    if (!isCompleted && onStart) onStart();
+  }
+
   return (
-    <View style={[styles.card, isCompleted && styles.cardDone, glowStyle]}>
+    <Pressable
+      style={[styles.card, isCompleted && styles.cardDone, glowStyle]}
+      onPress={handleCardPress}
+      disabled={isCompleted || !onStart}
+    >
       {/* Left accent bar */}
       <View style={[styles.accent, { backgroundColor: isCompleted ? colors.success.default : pm.color }]} />
 
@@ -76,7 +86,6 @@ export function QuestCard({ task, onStart, onComplete, onDelete }: QuestCardProp
             </View>
           )}
 
-          {/* XP */}
           <View style={styles.xpChip}>
             <Ionicons name="flash" size={10} color={isCompleted ? colors.success.default : colors.primary.default} />
             <AText style={[styles.xpText, { color: isCompleted ? colors.success.default : colors.primary.default }]}>
@@ -86,7 +95,7 @@ export function QuestCard({ task, onStart, onComplete, onDelete }: QuestCardProp
         </View>
       </View>
 
-      {/* Actions */}
+      {/* Right action area */}
       <View style={styles.actions}>
         {isCompleted ? (
           <View style={styles.doneIcon}>
@@ -95,19 +104,24 @@ export function QuestCard({ task, onStart, onComplete, onDelete }: QuestCardProp
         ) : (
           <>
             {onComplete && (
-              <Pressable style={[styles.actionBtn, styles.completeBtn]} onPress={onComplete}>
+              // stopPropagation equivalent: onPress on this button, card Pressable won't also fire
+              <Pressable
+                style={[styles.actionBtn, styles.completeBtn]}
+                onPress={(e) => { e.stopPropagation?.(); onComplete(); }}
+              >
                 <Ionicons name="checkmark" size={16} color={colors.success.default} />
               </Pressable>
             )}
-            {onStart && (
-              <Pressable style={[styles.actionBtn, styles.startBtn]} onPress={onStart}>
+            {/* Play icon hint — decorative, card itself is the tap target */}
+            {onStart && !onComplete && (
+              <View style={[styles.actionBtn, styles.startHint]}>
                 <Ionicons name="play" size={14} color={colors.primary.default} />
-              </Pressable>
+              </View>
             )}
           </>
         )}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -134,9 +148,9 @@ const styles = StyleSheet.create({
     marginLeft:   1,
   },
   content: {
-    flex:       1,
-    padding:    spacing[4],
-    gap:        spacing[2],
+    flex:    1,
+    padding: spacing[4],
+    gap:     spacing[2],
   },
   titleRow: {
     flexDirection: 'row',
@@ -144,12 +158,12 @@ const styles = StyleSheet.create({
     gap:           spacing[2],
   },
   title: {
-    flex:        1,
-    color:       colors.text.primary,
-    lineHeight:  20,
+    flex:       1,
+    color:      colors.text.primary,
+    lineHeight: 20,
   },
   titleDone: {
-    color:          colors.text.faint,
+    color:              colors.text.faint,
     textDecorationLine: 'line-through',
   },
   metaRow: {
@@ -197,20 +211,22 @@ const styles = StyleSheet.create({
     paddingRight:  spacing[3],
   },
   actionBtn: {
-    width:           32,
-    height:          32,
-    borderRadius:    radius.full,
-    borderWidth:     1,
-    alignItems:      'center',
-    justifyContent:  'center',
+    width:          32,
+    height:         32,
+    borderRadius:   radius.full,
+    borderWidth:    1,
+    alignItems:     'center',
+    justifyContent: 'center',
   },
   completeBtn: {
     borderColor:     colors.success.default + '50',
     backgroundColor: colors.success.faint,
   },
-  startBtn: {
-    borderColor:     colors.primary.default + '50',
+  // Non-interactive hint icon — shown when only onStart is provided (Dashboard cards)
+  startHint: {
+    borderColor:     colors.primary.default + '30',
     backgroundColor: colors.primary.faint,
+    opacity:         0.7,
   },
   doneIcon: {
     paddingHorizontal: spacing[2],

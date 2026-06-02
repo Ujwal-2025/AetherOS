@@ -8,16 +8,26 @@ import { QuestCard } from '../components/shared/QuestCard';
 import { FilterTabs } from '../components/shared/FilterTabs';
 import { CreateTaskModal } from '../components/shared/CreateTaskModal';
 import { XPFlyOut } from '../components/shared/XPFlyOut';
+import { useNavigation } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useTaskStore } from '../store/useTaskStore';
 import { useUserStore } from '../store/useUserStore';
 import { useAchievementStore } from '../store/useAchievementStore';
 import { useStatsStore } from '../store/useStatsStore';
+import { useFocusStore } from '../store/useFocusStore';
 import { haptics } from '../utils/haptics';
-import { Task } from '../types';
+import { Task, MainTabParamList, FocusMode } from '../types';
+
+function modeFromDuration(minutes?: number): FocusMode {
+  if (!minutes || minutes <= 25) return 'sprint';
+  if (minutes <= 60)             return 'flow';
+  return 'deep';
+}
 
 type FilterKey = 'all' | 'today' | 'completed';
 
 export function TasksScreen() {
+  const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
   const [filter,     setFilter]    = useState<FilterKey>('today');
   const [showCreate, setShowCreate] = useState(false);
   const [flyOutXP,   setFlyOutXP]  = useState<number | null>(null);
@@ -26,6 +36,7 @@ export function TasksScreen() {
   const { profile, rank, addXP, incrementTasksCompleted, comboMultiplier, incrementCombo } = useUserStore();
   const { checkAchievements } = useAchievementStore();
   const { recordActivity, deepWorkSessions } = useStatsStore();
+  const { setPendingTask } = useFocusStore();
 
   const allActive     = tasks.filter((t) => t.status === 'pending' || t.status === 'in_progress');
   const todayList     = todaysTasks();
@@ -52,6 +63,13 @@ export function TasksScreen() {
     const todayCompleted = completedToday().length + 1;
     recordActivity({ xpEarned: earned, tasksCompleted: 1, streakDay: profile.currentStreak });
     checkAchievements({ totalTasks: newTotalTasks, currentStreak: profile.currentStreak, longestStreak: profile.longestStreak, rank, focusMinutes: profile.focusMinutesTotal, todayTasks: todayCompleted, completionHour: new Date().getHours(), deepWorkSessions });
+  }
+
+  function handleStartTask(task: Task) {
+    haptics.light();
+    const mode = modeFromDuration(task.estimatedMinutes);
+    setPendingTask(task.id, task.title, mode);
+    navigation.navigate('Focus');
   }
 
   const flyOutColor = comboMultiplier > 1.0 ? '#fbbf24' : colors.primary.default;
@@ -82,7 +100,12 @@ export function TasksScreen() {
           <EmptyState filter={filter} onAdd={() => setShowCreate(true)} />
         ) : (
           filtered.map((task) => (
-            <QuestCard key={task.id} task={task} onStart={() => {}} onComplete={() => handleComplete(task.id)} />
+            <QuestCard
+                key={task.id}
+                task={task}
+                onStart={task.status !== 'completed' ? () => handleStartTask(task) : undefined}
+                onComplete={task.status !== 'completed' ? () => handleComplete(task.id) : undefined}
+              />
           ))
         )}
         <View style={{ height: spacing[16] }} />
