@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Pressable, StyleSheet, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,9 @@ import { ProfileScreen } from '../screens/ProfileScreen';
 import { MainTabParamList } from '../types';
 import { useAchievementStore } from '../store/useAchievementStore';
 import { useTaskStore } from '../store/useTaskStore';
+import { useUserStore } from '../store/useUserStore';
 import { AchievementToast } from '../components/shared/AchievementToast';
+import { XPFlyOut } from '../components/shared/XPFlyOut';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -55,9 +57,17 @@ function TabLabel({ label, focused }: { label: string; focused: boolean }) {
 export function MainNavigator() {
   const { pendingUnlockQueue, dequeueUnlock } = useAchievementStore();
   const { resetDailyTasks } = useTaskStore();
+  const { profile, addXP, checkAndUpdateStreak } = useUserStore();
+  const [showLoginBonus, setShowLoginBonus] = useState(false);
 
   useEffect(() => {
     resetDailyTasks();
+    const today = new Date().toISOString().split('T')[0];
+    if (profile.lastActiveDate !== today) {
+      checkAndUpdateStreak();
+      addXP(25);
+      setShowLoginBonus(true);
+    }
   }, []);
 
   return (
@@ -131,6 +141,7 @@ export function MainNavigator() {
         achievement={pendingUnlockQueue[0] ?? null}
         onHide={dequeueUnlock}
       />
+      <XPFlyOut xp={25} color="#fbbf24" visible={showLoginBonus} onHide={() => setShowLoginBonus(false)} />
     </View>
   );
 }

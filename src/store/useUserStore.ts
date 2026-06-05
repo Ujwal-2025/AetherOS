@@ -91,7 +91,8 @@ export const useUserStore = create<UserState>()(
           return;
         }
 
-        const newStreak = continuesStreak ? profile.currentStreak + 1 : 1;
+        const newStreak    = continuesStreak ? profile.currentStreak + 1 : 1;
+        const earnedShield = continuesStreak && newStreak % 7 === 0;
         set((state) => ({
           profile: {
             ...state.profile,
@@ -99,6 +100,7 @@ export const useUserStore = create<UserState>()(
             longestStreak:  Math.max(newStreak, state.profile.longestStreak),
             lastActiveDate: today,
           },
+          streakShields: earnedShield ? state.streakShields + 1 : state.streakShields,
         }));
       },
 

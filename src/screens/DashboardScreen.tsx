@@ -15,11 +15,13 @@ import { RankUpOverlay } from '../components/shared/RankUpOverlay';
 import { DailyChallengeCard } from '../components/shared/DailyChallengeCard';
 import { DailyCompletionSheet } from '../components/shared/DailyCompletionSheet';
 import { MetricDetailSheet } from '../components/shared/MetricDetailSheet';
+import { DayCompleteOverlay } from '../components/shared/DayCompleteOverlay';
 import { useUserStore } from '../store/useUserStore';
 import { useTaskStore } from '../store/useTaskStore';
 import { useFocusStore } from '../store/useFocusStore';
 import { useAchievementStore } from '../store/useAchievementStore';
 import { useStatsStore } from '../store/useStatsStore';
+import { useRef } from 'react';
 import { getRankThreshold, getNextRankThreshold } from '../utils/xp';
 import { haptics } from '../utils/haptics';
 import { MainTabParamList, FocusMode, Task, TaskCategory } from '../types';
@@ -50,14 +52,16 @@ const METRIC_CONFIG: MetricConfig[] = [
 export function DashboardScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
   const { profile, rank, rankProgress, pendingRankUp, clearRankUp, comboMultiplier, comboCount,
-          addXP, incrementTasksCompleted, incrementCombo } = useUserStore();
+          addXP, incrementTasksCompleted, incrementCombo, streakShields } = useUserStore();
   const { todaysTasks, completedToday, completionRateToday, xpEarnedToday, completeTask } = useTaskStore();
   const { setPendingTask } = useFocusStore();
   const { checkAchievements, getUnlocked } = useAchievementStore();
-  const { recordActivity, deepWorkSessions } = useStatsStore();
+  const { recordActivity, deepWorkSessions, recordCategoryActivity, categoryStreaks } = useStatsStore();
 
   const [showCompletionDetail, setShowCompletionDetail] = useState(false);
   const [selectedMetric,       setSelectedMetric]       = useState<MetricConfig | null>(null);
+  const [showDayComplete,      setShowDayComplete]      = useState(false);
+  const hasCelebrated = useRef(false);
 
   const rankInfo       = getRankThreshold(rank);
   const nextRank       = getNextRankThreshold(rank);
@@ -65,6 +69,14 @@ export function DashboardScreen() {
   const completedCount = completedToday().length;
   const totalToday     = todaysTasks().length;
   const completionRate = completionRateToday();
+
+  useEffect(() => {
+    if (completionRate === 1 && totalToday > 0 && !hasCelebrated.current) {
+      hasCelebrated.current = true;
+      setShowDayComplete(true);
+    }
+    if (completionRate < 1) hasCelebrated.current = false;
+  }, [completionRate, totalToday]);
   const todayXP        = xpEarnedToday();
   const nextRankXP     = nextRank ? nextRank.minXP : profile.totalXP;
   const level          = Math.floor(profile.totalXP / 1000) + 1;
@@ -97,11 +109,13 @@ export function DashboardScreen() {
   // Checkmark button → complete the task in-place
   function handleCompleteTask(taskId: string) {
     haptics.success();
+    const task    = activeTasks.find((t) => t.id === taskId);
     const baseXp  = completeTask(taskId, profile.currentStreak);
     const earned  = Math.round(baseXp * comboMultiplier);
     addXP(earned);
     incrementTasksCompleted();
     incrementCombo();
+    if (task) recordCategoryActivity(task.category);
     recordActivity({ xpEarned: earned, tasksCompleted: 1, streakDay: profile.currentStreak });
     checkAchievements({
       totalTasks:       profile.tasksCompleted + 1,
@@ -173,6 +187,12 @@ export function DashboardScreen() {
                     <AText variant="caption" color="muted"> DAYS</AText>
                   </View>
                   {streakAtRisk && <AText style={styles.streakRiskLabel}>AT RISK</AText>}
+                  {streakShields > 0 && (
+                    <View style={styles.shieldBadge}>
+                      <Ionicons name="shield-checkmark" size={10} color={colors.secondary.default} />
+                      <AText style={styles.shieldText}>{streakShields} SHIELD{streakShields > 1 ? 'S' : ''}</AText>
+                    </View>
+                  )}
                 </View>
                 <View style={styles.statDivider} />
                 <View style={[styles.statItem, { alignItems: 'flex-end' }]}>
@@ -263,6 +283,7 @@ export function DashboardScreen() {
                   color={m.color}
                   icon={m.icon}
                   highlight={m.highlight}
+                  streak={categoryStreaks[m.category] ?? 0}
                   onPress={() => { haptics.light(); setSelectedMetric(m); }}
                 />
               );
@@ -273,6 +294,7 @@ export function DashboardScreen() {
         <View style={{ height: spacing[12] }} />
       </ScrollView>
 
+      <DayCompleteOverlay visible={showDayComplete} xpEarned={todayXP} streak={profile.currentStreak} onDismiss={() => setShowDayComplete(false)} />
       <RankUpOverlay rank={pendingRankUp ?? 'E'} visible={pendingRankUp !== null} onDismiss={clearRankUp} />
       <DailyCompletionSheet visible={showCompletionDetail} onClose={() => setShowCompletionDetail(false)} />
       {selectedMetric && (
@@ -289,9 +311,9 @@ export function DashboardScreen() {
   );
 }
 
-function MetricRing({ label, value, color, icon, highlight = false, onPress }: {
+function MetricRing({ label, value, color, icon, highlight = false, streak = 0, onPress }: {
   label: string; value: number; color: string;
-  icon: keyof typeof Ionicons.glyphMap; highlight?: boolean; onPress?: () => void;
+  icon: keyof typeof Ionicons.glyphMap; highlight?: boolean; streak?: number; onPress?: () => void;
 }) {
   return (
     <Pressable
@@ -310,6 +332,12 @@ function MetricRing({ label, value, color, icon, highlight = false, onPress }: {
       <AText variant="label" uppercase style={{ color: highlight ? colors.white : colors.text.muted, letterSpacing: 2, fontSize: 9, fontFamily: highlight ? fontFamily.bold : fontFamily.medium }}>
         {label}
       </AText>
+      {streak > 1 && (
+        <View style={[styles.catStreakBadge, { borderColor: color + '40', backgroundColor: color + '12' }]}>
+          <Ionicons name="flame" size={9} color={color} />
+          <AText style={[styles.catStreakText, { color }]}>{streak}d</AText>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -367,4 +395,8 @@ const styles = StyleSheet.create({
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[3] },
   metricCard: { flex: 1, minWidth: '45%', backgroundColor: '#0a0a0a', borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border.subtle, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing[5], paddingHorizontal: spacing[3], gap: spacing[3], overflow: 'hidden' },
   metricGlow: { position: 'absolute', width: 80, height: 80, borderRadius: radius.full, top: '50%', left: '50%', marginTop: -40, marginLeft: -40, opacity: 0.6 },
+  shieldBadge:    { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
+  shieldText:     { fontFamily: fontFamily.bold, fontSize: 9, letterSpacing: 1, color: colors.secondary.default },
+  catStreakBadge: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 99, borderWidth: 1 },
+  catStreakText:  { fontFamily: fontFamily.bold, fontSize: 8, letterSpacing: 0.5 },
 });

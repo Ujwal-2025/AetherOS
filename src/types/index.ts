@@ -34,7 +34,7 @@ export interface Task {
 
 // ─── Focus Session ────────────────────────────────────────────────────────────
 
-export type FocusMode = 'deep' | 'flow' | 'sprint';
+export type FocusMode = 'deep' | 'flow' | 'sprint' | 'custom';
 
 export interface FocusSession {
   id:              string;

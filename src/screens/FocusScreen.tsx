@@ -27,20 +27,22 @@ interface ModeConfig {
 }
 
 const MODES: ModeConfig[] = [
-  { key: 'deep',   label: 'Deep Work',  subtitle: 'No interruptions. Full immersion.',   minutes: 90, xp: 500, color: colors.primary.default,   icon: 'skull-outline',  gradient: ['rgba(183,109,255,0.12)', 'transparent'] },
-  { key: 'flow',   label: 'Flow State', subtitle: 'Sustained focus. Steady output.',     minutes: 60, xp: 300, color: colors.secondary.default, icon: 'water-outline',  gradient: ['rgba(173,198,255,0.12)', 'transparent'] },
-  { key: 'sprint', label: 'Sprint',     subtitle: 'Short burst. Fast wins.',             minutes: 25, xp: 150, color: colors.success.default,   icon: 'flash-outline',  gradient: ['rgba(16,185,129,0.12)',  'transparent'] },
+  { key: 'deep',   label: 'Deep Work',  subtitle: 'No interruptions. Full immersion.',   minutes: 90, xp: 500, color: colors.primary.default,   icon: 'skull-outline',   gradient: ['rgba(183,109,255,0.12)', 'transparent'] },
+  { key: 'flow',   label: 'Flow State', subtitle: 'Sustained focus. Steady output.',     minutes: 60, xp: 300, color: colors.secondary.default,  icon: 'water-outline',   gradient: ['rgba(173,198,255,0.12)', 'transparent'] },
+  { key: 'sprint', label: 'Sprint',     subtitle: 'Short burst. Fast wins.',             minutes: 25, xp: 150, color: colors.success.default,    icon: 'flash-outline',   gradient: ['rgba(16,185,129,0.12)',  'transparent'] },
+  { key: 'custom', label: 'Custom',     subtitle: 'Your time. Your rules.',              minutes: 0,  xp: 0,   color: '#fbbf24',                  icon: 'create-outline',  gradient: ['rgba(251,191,36,0.12)',  'transparent'] },
 ];
 
-type Stage = 'select' | 'running' | 'complete';
+type Stage = 'select' | 'custom_input' | 'running' | 'complete';
 
 export function FocusScreen() {
-  const [stage,      setStage]      = useState<Stage>('select');
-  const [activeMode, setActiveMode] = useState<ModeConfig>(MODES[0]);
-  const [secondsLeft, setSecondsLeft] = useState(0);
-  const [isPaused,   setIsPaused]   = useState(false);
-  const [xpEarned,   setXpEarned]   = useState(0);
-  const [flyOutXP,   setFlyOutXP]   = useState<number | null>(null);
+  const [stage,         setStage]         = useState<Stage>('select');
+  const [activeMode,    setActiveMode]    = useState<ModeConfig>(MODES[0]);
+  const [secondsLeft,   setSecondsLeft]   = useState(0);
+  const [isPaused,      setIsPaused]      = useState(false);
+  const [xpEarned,      setXpEarned]      = useState(0);
+  const [flyOutXP,      setFlyOutXP]      = useState<number | null>(null);
+  const [customMinutes, setCustomMinutes] = useState(30);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { addXP, addFocusMinutes, incrementCombo, profile, rank } = useUserStore();
@@ -100,6 +102,17 @@ export function FocusScreen() {
     clearPendingTask(); setStage('select'); setIsPaused(false); setSecondsLeft(0);
   }
 
+  function startCustomSession() {
+    const mins = Math.min(180, Math.max(5, customMinutes));
+    const xp   = Math.max(Math.round(mins * 3), 50);
+    const mode: ModeConfig = {
+      key: 'custom', label: 'Custom', subtitle: 'Your time. Your rules.',
+      minutes: mins, xp, color: '#fbbf24', icon: 'create-outline',
+      gradient: ['rgba(251,191,36,0.12)', 'transparent'],
+    };
+    startSession(mode);
+  }
+
   useEffect(() => {
     if (stage !== 'running' || isPaused) { clearInterval(intervalRef.current!); return; }
     intervalRef.current = setInterval(() => {
@@ -108,8 +121,9 @@ export function FocusScreen() {
     return () => clearInterval(intervalRef.current!);
   }, [stage, isPaused]);
 
-  if (stage === 'select')   return <ModeSelectView onSelect={startSession} />;
-  if (stage === 'complete') return <CompleteView mode={activeMode} xp={xpEarned} onRestart={handleRestart} />;
+  if (stage === 'select')       return <ModeSelectView onSelect={startSession} onCustom={() => setStage('custom_input')} />;
+  if (stage === 'custom_input') return <CustomInputView customMinutes={customMinutes} setCustomMinutes={setCustomMinutes} onStart={startCustomSession} onBack={() => setStage('select')} />;
+  if (stage === 'complete')     return <CompleteView mode={activeMode} xp={xpEarned} onRestart={handleRestart} />;
 
   const total    = activeMode.minutes * 60;
   const progress = (total - secondsLeft) / total;
@@ -160,7 +174,7 @@ export function FocusScreen() {
   );
 }
 
-function ModeSelectView({ onSelect }: { onSelect: (m: ModeConfig) => void }) {
+function ModeSelectView({ onSelect, onCustom }: { onSelect: (m: ModeConfig) => void; onCustom: () => void }) {
   const { pendingTaskTitle } = useFocusStore();
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -176,7 +190,11 @@ function ModeSelectView({ onSelect }: { onSelect: (m: ModeConfig) => void }) {
       </View>
       <View style={styles.modeList}>
         {MODES.map((mode) => (
-          <Pressable key={mode.key} style={styles.modeCard} onPress={() => onSelect(mode)}>
+          <Pressable
+            key={mode.key}
+            style={styles.modeCard}
+            onPress={() => mode.key === 'custom' ? onCustom() : onSelect(mode)}
+          >
             <LinearGradient colors={mode.gradient} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} />
             <View style={[styles.modeIconBox, { borderColor: mode.color + '30', backgroundColor: mode.color + '10' }]}>
               <Ionicons name={mode.icon} size={26} color={mode.color} />
@@ -186,12 +204,90 @@ function ModeSelectView({ onSelect }: { onSelect: (m: ModeConfig) => void }) {
               <AText variant="caption" color="muted" style={{ marginTop: 2 }}>{mode.subtitle}</AText>
             </View>
             <View style={styles.modeMeta}>
-              <AText variant="body" weight="bold" style={{ color: mode.color }}>{mode.minutes}m</AText>
-              <AText variant="caption" style={{ color: mode.color + 'AA' }}>+{mode.xp} XP</AText>
+              {mode.key === 'custom' ? (
+                <AText variant="body" weight="bold" style={{ color: mode.color }}>Any</AText>
+              ) : (
+                <AText variant="body" weight="bold" style={{ color: mode.color }}>{mode.minutes}m</AText>
+              )}
+              <AText variant="caption" style={{ color: mode.color + 'AA' }}>
+                {mode.key === 'custom' ? 'Custom XP' : `+${mode.xp} XP`}
+              </AText>
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.text.faint} />
           </Pressable>
         ))}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const CUSTOM_PRESETS = [15, 25, 45, 60, 90];
+
+function CustomInputView({ customMinutes, setCustomMinutes, onStart, onBack }: {
+  customMinutes:    number;
+  setCustomMinutes: (m: number) => void;
+  onStart:          () => void;
+  onBack:           () => void;
+}) {
+  const xp = Math.max(Math.round(customMinutes * 3), 50);
+
+  function adjust(delta: number) {
+    setCustomMinutes(Math.min(180, Math.max(5, customMinutes + delta)));
+  }
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <LinearGradient colors={['rgba(251,191,36,0.10)', 'transparent']} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.5 }} />
+
+      <View style={styles.timerHeader}>
+        <Pressable onPress={onBack} style={styles.endBtn}>
+          <Ionicons name="arrow-back" size={18} color={colors.text.muted} />
+          <AText variant="label" color="muted">Back</AText>
+        </Pressable>
+        <AText variant="label" weight="bold" uppercase style={{ color: '#fbbf24', letterSpacing: 2 }}>Custom Session</AText>
+        <View style={{ width: 70 }} />
+      </View>
+
+      <View style={styles.customCenter}>
+        <AText variant="label" color="muted" style={{ letterSpacing: 2, marginBottom: spacing[6] }}>SESSION DURATION</AText>
+
+        <View style={styles.customPicker}>
+          <Pressable style={[styles.adjustBtn, { borderColor: '#fbbf2440', backgroundColor: '#fbbf2410' }]} onPress={() => adjust(-5)}>
+            <AText style={{ color: '#fbbf24', fontSize: 26, fontFamily: fontFamily.bold, lineHeight: 30 }}>−</AText>
+          </Pressable>
+          <View style={styles.customDisplay}>
+            <AText style={styles.customMinutes}>{customMinutes}</AText>
+            <AText variant="body" color="muted" uppercase style={{ letterSpacing: 3 }}>min</AText>
+          </View>
+          <Pressable style={[styles.adjustBtn, { borderColor: '#fbbf2440', backgroundColor: '#fbbf2410' }]} onPress={() => adjust(5)}>
+            <AText style={{ color: '#fbbf24', fontSize: 26, fontFamily: fontFamily.bold, lineHeight: 30 }}>+</AText>
+          </Pressable>
+        </View>
+
+        <View style={styles.presetRow}>
+          {CUSTOM_PRESETS.map((p) => (
+            <Pressable
+              key={p}
+              style={[styles.presetBtn, customMinutes === p && { borderColor: '#fbbf2460', backgroundColor: '#fbbf2415' }]}
+              onPress={() => setCustomMinutes(p)}
+            >
+              <AText style={{ color: customMinutes === p ? '#fbbf24' : colors.text.faint, fontSize: 12, fontFamily: fontFamily.medium }}>{p}m</AText>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.timerFooter}>
+        <View style={styles.timerStat}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>XP Reward</AText><AText variant="subheading" weight="bold" style={{ color: '#fbbf24' }}>+{xp}</AText></View>
+        <View style={[styles.timerStat, { borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border.subtle }]}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>Mode</AText><AText variant="body" weight="semiBold">Custom</AText></View>
+        <View style={styles.timerStat}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>Duration</AText><AText variant="subheading" weight="bold">{customMinutes}m</AText></View>
+      </View>
+
+      <View style={styles.customStartWrapper}>
+        <Pressable style={styles.customStartBtn} onPress={onStart}>
+          <AText style={styles.customStartText}>Start Session</AText>
+          <Ionicons name="flash" size={16} color="#fbbf24" />
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -239,4 +335,16 @@ const styles = StyleSheet.create({
   xpBanner:   { flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[6], paddingVertical: spacing[3], borderRadius: radius.full, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.bg.elevated, marginBottom: spacing[8] },
   xpBannerText: { fontFamily: fontFamily.bold, fontSize: 22 },
   restartBtn: { paddingHorizontal: spacing[8], paddingVertical: spacing[4], borderRadius: radius.full, borderWidth: 1 },
+
+  // Custom input view
+  customCenter:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  customPicker:       { flexDirection: 'row', alignItems: 'center', gap: spacing[6], marginBottom: spacing[6] },
+  adjustBtn:          { width: 52, height: 52, borderRadius: radius.full, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  customDisplay:      { alignItems: 'center', minWidth: 120 },
+  customMinutes:      { fontFamily: fontFamily.bold, fontSize: 72, color: '#fbbf24', lineHeight: 80, letterSpacing: -2 },
+  presetRow:          { flexDirection: 'row', gap: spacing[2] },
+  presetBtn:          { paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderRadius: radius.full, borderWidth: 1, borderColor: colors.border.default },
+  customStartWrapper: { paddingHorizontal: spacing[5], paddingBottom: spacing[8] },
+  customStartBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], backgroundColor: '#fbbf2420', borderWidth: 1, borderColor: '#fbbf2450', borderRadius: radius.full, paddingVertical: spacing[4] },
+  customStartText:    { fontFamily: fontFamily.semiBold, fontSize: 16, color: '#fbbf24', letterSpacing: 0.5 },
 });

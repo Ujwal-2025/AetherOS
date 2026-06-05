@@ -136,10 +136,13 @@ export const useTaskStore = create<TaskState>()(
         const today = getTodayString();
         return get().tasks.filter((t) => {
           if (t.status === 'failed') return false;
-          const createdToday = new Date(t.createdAt).toISOString().split('T')[0] === today;
-          const dueToday     = t.dueDate ? new Date(t.dueDate).toISOString().split('T')[0] === today : false;
-          const isDaily      = t.recurrence === 'daily';
-          return createdToday || dueToday || isDaily || t.status === 'completed';
+          const createdToday   = new Date(t.createdAt).toISOString().split('T')[0] === today;
+          const dueToday       = t.dueDate ? new Date(t.dueDate).toISOString().split('T')[0] === today : false;
+          const isDaily        = t.recurrence === 'daily';
+          const completedToday = t.status === 'completed' && t.completedAt
+            ? new Date(t.completedAt).toISOString().split('T')[0] === today
+            : false;
+          return createdToday || dueToday || isDaily || completedToday;
         });
       },
 

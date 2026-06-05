@@ -35,7 +35,7 @@ export function TasksScreen() {
   const { tasks, todaysTasks, completedToday, completeTask, deleteTask } = useTaskStore();
   const { profile, rank, addXP, incrementTasksCompleted, comboMultiplier, incrementCombo } = useUserStore();
   const { checkAchievements } = useAchievementStore();
-  const { recordActivity, deepWorkSessions } = useStatsStore();
+  const { recordActivity, deepWorkSessions, recordCategoryActivity } = useStatsStore();
   const { setPendingTask } = useFocusStore();
 
   const allActive     = tasks.filter((t) => t.status === 'pending' || t.status === 'in_progress');
@@ -52,6 +52,7 @@ export function TasksScreen() {
 
   function handleComplete(taskId: string) {
     haptics.success();
+    const task   = tasks.find((t) => t.id === taskId);
     const baseXp = completeTask(taskId, profile.currentStreak);
     const earned = Math.round(baseXp * comboMultiplier);
     addXP(earned);
@@ -61,6 +62,7 @@ export function TasksScreen() {
 
     const newTotalTasks  = profile.tasksCompleted + 1;
     const todayCompleted = completedToday().length + 1;
+    if (task) recordCategoryActivity(task.category);
     recordActivity({ xpEarned: earned, tasksCompleted: 1, streakDay: profile.currentStreak });
     checkAchievements({ totalTasks: newTotalTasks, currentStreak: profile.currentStreak, longestStreak: profile.longestStreak, rank, focusMinutes: profile.focusMinutesTotal, todayTasks: todayCompleted, completionHour: new Date().getHours(), deepWorkSessions });
   }

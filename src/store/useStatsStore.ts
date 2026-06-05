@@ -16,8 +16,10 @@ const EMPTY_DAY = (date: string, streakDay = 0): DayStats =>
   ({ date, tasksCompleted: 0, xpEarned: 0, focusMinutes: 0, streakDay });
 
 interface StatsState {
-  days:             DayStats[];
-  deepWorkSessions: number;
+  days:               DayStats[];
+  deepWorkSessions:   number;
+  categoryStreaks:    Record<string, number>;
+  categoryLastActive: Record<string, string>;
   recordActivity: (opts: {
     xpEarned:        number;
     tasksCompleted?: number;
@@ -25,6 +27,7 @@ interface StatsState {
     streakDay:       number;
     isDeepWork?:     boolean;
   }) => void;
+  recordCategoryActivity: (category: string) => void;
   getDay:         (date: string) => DayStats;
   getLast28Days:  () => DayStats[];
 }
@@ -32,8 +35,10 @@ interface StatsState {
 export const useStatsStore = create<StatsState>()(
   persist(
   (set, get) => ({
-  days:             [],
-  deepWorkSessions: 0,
+  days:               [],
+  deepWorkSessions:   0,
+  categoryStreaks:    {},
+  categoryLastActive: {},
 
   recordActivity: ({ xpEarned, tasksCompleted = 0, focusMinutes = 0, streakDay, isDeepWork = false }) => {
     const today    = getTodayString();
@@ -49,11 +54,33 @@ export const useStatsStore = create<StatsState>()(
     });
   },
 
+  recordCategoryActivity: (category) => {
+    const today = getTodayString();
+    set((state) => {
+      if (state.categoryLastActive[category] === today) return {};
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      const prev   = state.categoryLastActive[category];
+      const streak = state.categoryStreaks[category] ?? 0;
+      const newStreak = prev === yesterdayStr ? streak + 1 : 1;
+      return {
+        categoryStreaks:    { ...state.categoryStreaks,    [category]: newStreak },
+        categoryLastActive: { ...state.categoryLastActive, [category]: today },
+      };
+    });
+  },
+
   getDay:        (date) => get().days.find((d) => d.date === date) ?? EMPTY_DAY(date),
   getLast28Days: () => last28Days().map((date) => get().days.find((d) => d.date === date) ?? EMPTY_DAY(date)),
   }),
   {
     name: 'aetheros-stats',
-    partialize: (state) => ({ days: state.days, deepWorkSessions: state.deepWorkSessions }),
+    partialize: (state) => ({
+      days:               state.days,
+      deepWorkSessions:   state.deepWorkSessions,
+      categoryStreaks:    state.categoryStreaks,
+      categoryLastActive: state.categoryLastActive,
+    }),
   }
 ));
