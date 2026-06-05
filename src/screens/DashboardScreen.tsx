@@ -16,11 +16,13 @@ import { DailyChallengeCard } from '../components/shared/DailyChallengeCard';
 import { DailyCompletionSheet } from '../components/shared/DailyCompletionSheet';
 import { MetricDetailSheet } from '../components/shared/MetricDetailSheet';
 import { DayCompleteOverlay } from '../components/shared/DayCompleteOverlay';
+import { WeeklyBossCard } from '../components/shared/WeeklyBossCard';
 import { useUserStore } from '../store/useUserStore';
 import { useTaskStore } from '../store/useTaskStore';
 import { useFocusStore } from '../store/useFocusStore';
 import { useAchievementStore } from '../store/useAchievementStore';
 import { useStatsStore } from '../store/useStatsStore';
+import { useWeeklyBossStore } from '../store/useWeeklyBossStore';
 import { useRef } from 'react';
 import { getRankThreshold, getNextRankThreshold } from '../utils/xp';
 import { haptics } from '../utils/haptics';
@@ -57,6 +59,7 @@ export function DashboardScreen() {
   const { setPendingTask } = useFocusStore();
   const { checkAchievements, getUnlocked } = useAchievementStore();
   const { recordActivity, deepWorkSessions, recordCategoryActivity, categoryStreaks } = useStatsStore();
+  const { logTaskCompletion: bossTick } = useWeeklyBossStore();
 
   const [showCompletionDetail, setShowCompletionDetail] = useState(false);
   const [selectedMetric,       setSelectedMetric]       = useState<MetricConfig | null>(null);
@@ -116,6 +119,7 @@ export function DashboardScreen() {
     incrementTasksCompleted();
     incrementCombo();
     if (task) recordCategoryActivity(task.category);
+    bossTick();
     recordActivity({ xpEarned: earned, tasksCompleted: 1, streakDay: profile.currentStreak });
     checkAchievements({
       totalTasks:       profile.tasksCompleted + 1,
@@ -240,6 +244,9 @@ export function DashboardScreen() {
 
         {/* Daily Challenge */}
         <DailyChallengeCard />
+
+        {/* Weekly Boss */}
+        <WeeklyBossCard />
 
         {/* Active Quests */}
         <View style={styles.section}>

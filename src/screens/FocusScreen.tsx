@@ -10,6 +10,7 @@ import { XPFlyOut } from '../components/shared/XPFlyOut';
 import { useUserStore } from '../store/useUserStore';
 import { useFocusStore } from '../store/useFocusStore';
 import { useDailyChallengeStore } from '../store/useDailyChallengeStore';
+import { useWeeklyBossStore } from '../store/useWeeklyBossStore';
 import { useAchievementStore } from '../store/useAchievementStore';
 import { useStatsStore } from '../store/useStatsStore';
 import { haptics } from '../utils/haptics';
@@ -48,6 +49,7 @@ export function FocusScreen() {
   const { addXP, addFocusMinutes, incrementCombo, profile, rank } = useUserStore();
   const { pendingTaskTitle, autoStartMode, clearPendingTask } = useFocusStore();
   const { logFocusMinutes: logChallengeMinutes } = useDailyChallengeStore();
+  const { logFocusMinutes: logBossMinutes } = useWeeklyBossStore();
   const { checkAchievements } = useAchievementStore();
   const { recordActivity, deepWorkSessions } = useStatsStore();
 
@@ -72,6 +74,7 @@ export function FocusScreen() {
     addXP(earned);
     addFocusMinutes(activeMode.minutes);
     logChallengeMinutes(activeMode.minutes);
+    logBossMinutes(activeMode.minutes);
     incrementCombo();
     clearPendingTask();
     haptics.focusComplete();
@@ -92,7 +95,7 @@ export function FocusScreen() {
     setXpEarned(earnedPartial);
     if (earnedPartial > 0) { addXP(earnedPartial); setFlyOutXP(earnedPartial); }
     addFocusMinutes(elapsedMinutes);
-    if (elapsedMinutes > 0) logChallengeMinutes(elapsedMinutes);
+    if (elapsedMinutes > 0) { logChallengeMinutes(elapsedMinutes); logBossMinutes(elapsedMinutes); }
     clearPendingTask();
     if (earnedPartial > 0) haptics.success();
     setStage('complete');

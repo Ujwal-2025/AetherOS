@@ -14,6 +14,7 @@ import { useTaskStore } from '../store/useTaskStore';
 import { useUserStore } from '../store/useUserStore';
 import { useAchievementStore } from '../store/useAchievementStore';
 import { useStatsStore } from '../store/useStatsStore';
+import { useWeeklyBossStore } from '../store/useWeeklyBossStore';
 import { useFocusStore } from '../store/useFocusStore';
 import { haptics } from '../utils/haptics';
 import { Task, MainTabParamList, FocusMode } from '../types';
@@ -36,6 +37,7 @@ export function TasksScreen() {
   const { profile, rank, addXP, incrementTasksCompleted, comboMultiplier, incrementCombo } = useUserStore();
   const { checkAchievements } = useAchievementStore();
   const { recordActivity, deepWorkSessions, recordCategoryActivity } = useStatsStore();
+  const { logTaskCompletion: bossTick } = useWeeklyBossStore();
   const { setPendingTask } = useFocusStore();
 
   const allActive     = tasks.filter((t) => t.status === 'pending' || t.status === 'in_progress');
@@ -63,6 +65,7 @@ export function TasksScreen() {
     const newTotalTasks  = profile.tasksCompleted + 1;
     const todayCompleted = completedToday().length + 1;
     if (task) recordCategoryActivity(task.category);
+    bossTick();
     recordActivity({ xpEarned: earned, tasksCompleted: 1, streakDay: profile.currentStreak });
     checkAchievements({ totalTasks: newTotalTasks, currentStreak: profile.currentStreak, longestStreak: profile.longestStreak, rank, focusMinutes: profile.focusMinutesTotal, todayTasks: todayCompleted, completionHour: new Date().getHours(), deepWorkSessions });
   }

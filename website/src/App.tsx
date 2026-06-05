@@ -6,6 +6,7 @@ import { LiveDemo } from './components/LiveDemo'
 import { GoalToQuests } from './components/GoalToQuests'
 import { HowItWorks } from './components/HowItWorks'
 import { RankLadder } from './components/RankLadder'
+import { SocialProof } from './components/SocialProof'
 import { Waitlist } from './components/Waitlist'
 import { Footer } from './components/Footer'
 
@@ -20,6 +21,7 @@ export default function App() {
       <GoalToQuests />
       <HowItWorks />
       <RankLadder />
+      <SocialProof />
       <Waitlist />
       <Footer />
     </>

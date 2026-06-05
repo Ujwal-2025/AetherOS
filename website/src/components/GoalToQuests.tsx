@@ -9,6 +9,14 @@ type Quest = {
   xpReward: number
 }
 
+const DEMO_QUESTS: Quest[] = [
+  { title: 'Define your north star goal',    description: 'Write a clear 1-sentence mission statement for exactly what you want to achieve and by when.',  category: 'personal', priority: 'critical', xpReward: 600 },
+  { title: 'Block 90 minutes of deep work',  description: 'Schedule and protect one uninterrupted focus session every day toward your goal.',              category: 'work',     priority: 'high',     xpReward: 300 },
+  { title: 'Research 3 proven methods',      description: 'Spend 30 minutes studying the most effective approaches used by people who achieved this goal.', category: 'learning', priority: 'high',     xpReward: 300 },
+  { title: 'Track your baseline metrics',    description: 'Measure where you are today so you can quantify real progress over time.',                       category: 'work',     priority: 'medium',   xpReward: 150 },
+  { title: 'Find an accountability partner', description: 'Tell one trusted person your goal and agree to weekly check-ins.',                               category: 'personal', priority: 'medium',   xpReward: 150 },
+]
+
 const CATEGORY_COLORS: Record<Quest['category'], string> = {
   work:     '#b76dff',
   health:   '#adc6ff',
@@ -27,6 +35,7 @@ export function GoalToQuests() {
   const [goal, setGoal] = useState('')
   const [state, setState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
   const [quests, setQuests] = useState<Quest[]>([])
+  const [isDemoMode, setIsDemoMode] = useState(false)
   const [errorCountdown, setErrorCountdown] = useState(0)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -34,6 +43,7 @@ export function GoalToQuests() {
     if (!goal.trim() || state === 'loading') return
     setState('loading')
     setQuests([])
+    setIsDemoMode(false)
     try {
       const res = await fetch('/api/generate-quests', {
         method: 'POST',
@@ -46,18 +56,10 @@ export function GoalToQuests() {
       setQuests(data.slice(0, 5))
       setState('done')
     } catch {
-      setState('error')
-      setErrorCountdown(60)
-      countdownRef.current = setInterval(() => {
-        setErrorCountdown(n => {
-          if (n <= 1) {
-            clearInterval(countdownRef.current!)
-            setState('idle')
-            return 0
-          }
-          return n - 1
-        })
-      }, 1000)
+      // Show demo quests instead of error — keeps the demo interactive
+      setQuests(DEMO_QUESTS)
+      setIsDemoMode(true)
+      setState('done')
     }
   }
 
@@ -127,18 +129,6 @@ export function GoalToQuests() {
             ) : 'Generate Quests →'}
           </button>
 
-          {/* Error banner */}
-          {state === 'error' && (
-            <div style={{
-              background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.35)',
-              borderRadius: 12, padding: '12px 16px', textAlign: 'center',
-              animation: 'slide-in-up 0.3s ease-out',
-            }}>
-              <span style={{ fontSize: 14, color: '#f59e0b' }}>
-                AetherOS is resting… retrying in {errorCountdown}s
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Loading skeletons */}
@@ -159,6 +149,17 @@ export function GoalToQuests() {
         {/* Quest cards */}
         {state === 'done' && quests.length > 0 && (
           <div style={{ maxWidth: 640, margin: '32px auto 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {isDemoMode && (
+              <div style={{
+                background: 'rgba(173,198,255,0.08)', border: '1px solid rgba(173,198,255,0.20)',
+                borderRadius: 12, padding: '10px 16px', textAlign: 'center',
+                animation: 'slide-in-up 0.3s ease-out',
+              }}>
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  ✦ Example quests — deploy AetherOS with your API key for AI-personalized ones
+                </span>
+              </div>
+            )}
             {quests.map((q, i) => (
               <QuestCard key={i} quest={q} index={i} />
             ))}
