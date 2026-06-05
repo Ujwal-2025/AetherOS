@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, Pressable } from 'react-native';
+import { View, ScrollView, StyleSheet, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming, FadeInDown } from 'react-native-reanimated';
 import { colors, spacing, radius, fontFamily } from '../theme';
 import { AText } from '../components/ui/AText';
 import { CircularProgress } from '../components/shared/CircularProgress';
@@ -17,6 +17,8 @@ import { DailyCompletionSheet } from '../components/shared/DailyCompletionSheet'
 import { MetricDetailSheet } from '../components/shared/MetricDetailSheet';
 import { DayCompleteOverlay } from '../components/shared/DayCompleteOverlay';
 import { WeeklyBossCard } from '../components/shared/WeeklyBossCard';
+import { CreateTaskModal } from '../components/shared/CreateTaskModal';
+import { useCategoryStore } from '../store/useCategoryStore';
 import { useUserStore } from '../store/useUserStore';
 import { useTaskStore } from '../store/useTaskStore';
 import { useFocusStore } from '../store/useFocusStore';
@@ -26,7 +28,7 @@ import { useWeeklyBossStore } from '../store/useWeeklyBossStore';
 import { useRef } from 'react';
 import { getRankThreshold, getNextRankThreshold } from '../utils/xp';
 import { haptics } from '../utils/haptics';
-import { MainTabParamList, FocusMode, Task, TaskCategory } from '../types';
+import { MainTabParamList, FocusMode, Task } from '../types';
 
 // Derive focus mode from a task's estimated duration
 function modeFromDuration(minutes?: number): FocusMode {
@@ -35,21 +37,6 @@ function modeFromDuration(minutes?: number): FocusMode {
   return 'deep';
 }
 
-// ─── Metric config — each card maps 1:1 to a TaskCategory ────────────────────
-type MetricConfig = {
-  label:     string;
-  category:  TaskCategory;
-  color:     string;
-  icon:      keyof typeof Ionicons.glyphMap;
-  highlight: boolean;
-};
-
-const METRIC_CONFIG: MetricConfig[] = [
-  { label: 'Work',     category: 'work',     color: colors.primary.default,   icon: 'code-slash-outline', highlight: false },
-  { label: 'Health',   category: 'health',   color: colors.secondary.default, icon: 'fitness-outline',    highlight: true  },
-  { label: 'Learning', category: 'learning', color: colors.success.default,   icon: 'book-outline',       highlight: false },
-  { label: 'Personal', category: 'personal', color: colors.warning.default,   icon: 'person-outline',     highlight: false },
-];
 
 export function DashboardScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
@@ -61,8 +48,10 @@ export function DashboardScreen() {
   const { recordActivity, deepWorkSessions, recordCategoryActivity, categoryStreaks } = useStatsStore();
   const { logTaskCompletion: bossTick } = useWeeklyBossStore();
 
+  const { categories } = useCategoryStore();
   const [showCompletionDetail, setShowCompletionDetail] = useState(false);
-  const [selectedMetric,       setSelectedMetric]       = useState<MetricConfig | null>(null);
+  const [selectedMetric,       setSelectedMetric]       = useState<{ id: string; name: string; color: string; icon: string } | null>(null);
+  const [showCreateTask,       setShowCreateTask]       = useState(false);
   const [showDayComplete,      setShowDayComplete]      = useState(false);
   const hasCelebrated = useRef(false);
 
@@ -143,9 +132,14 @@ export function DashboardScreen() {
           <View style={styles.avatar}><Ionicons name="person" size={16} color={colors.primary.default} /></View>
           <AText variant="subheading" weight="bold" style={styles.logo}>AETHER OS</AText>
         </View>
-        <View style={styles.rankPill}>
-          <Ionicons name="ribbon" size={12} color={colors.primary.default} />
-          <AText variant="label" weight="bold" uppercase style={{ color: colors.primary.default, letterSpacing: 1.5 }}>{rankInfo.label}</AText>
+        <View style={styles.headerRight}>
+          <View style={styles.rankPill}>
+            <Ionicons name="ribbon" size={12} color={colors.primary.default} />
+            <AText variant="label" weight="bold" uppercase style={{ color: colors.primary.default, letterSpacing: 1.5 }}>{rankInfo.label}</AText>
+          </View>
+          <Pressable style={styles.quickAddBtn} onPress={() => { haptics.light(); setShowCreateTask(true); }}>
+            <Ionicons name="add" size={20} color={colors.primary.default} />
+          </Pressable>
         </View>
       </View>
 
@@ -166,6 +160,7 @@ export function DashboardScreen() {
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Hero Card */}
+        <Animated.View entering={FadeInDown.delay(0).duration(500).springify()}>
         <View style={[styles.heroCard, streakAtRisk && { borderColor: colors.danger.default + '40' }]}>
           <LinearGradient colors={['#1a1025', '#0a0a0a']} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} />
           <View style={[styles.heroGlowBlob, { pointerEvents: 'none' }]} />
@@ -210,12 +205,20 @@ export function DashboardScreen() {
             </View>
           </View>
           <View style={styles.heroBadges}>
-            <View style={styles.heroBadge}><Ionicons name="flash" size={22} color={colors.primary.default} /><View><AText variant="subheading" weight="bold" style={styles.badgeNumber}>{activeTasks.length}</AText><AText variant="label" color="muted" style={{ fontSize: 9, letterSpacing: 1 }}>ACTIVE</AText></View></View>
+            <View style={[styles.heroBadge, activeTasks.length === 0 && { borderColor: colors.success.default + '30' }]}>
+              <Ionicons name={activeTasks.length === 0 ? 'checkmark-done-circle' : 'flash'} size={22} color={activeTasks.length === 0 ? colors.success.default : colors.primary.default} />
+              <View>
+                <AText variant="subheading" weight="bold" style={[styles.badgeNumber, activeTasks.length === 0 && { color: colors.success.default }]}>{activeTasks.length === 0 ? '✓' : activeTasks.length}</AText>
+                <AText variant="label" color="muted" style={{ fontSize: 9, letterSpacing: 1 }}>{activeTasks.length === 0 ? 'CLEAR' : 'PENDING'}</AText>
+              </View>
+            </View>
             <View style={styles.heroBadge}><Ionicons name="ribbon" size={22} color={colors.text.muted} /><View><AText variant="subheading" weight="bold" style={styles.badgeNumber}>{medalCount}</AText><AText variant="label" color="muted" style={{ fontSize: 9, letterSpacing: 1 }}>MEDALS</AText></View></View>
           </View>
         </View>
+        </Animated.View>
 
         {/* Daily Completion Card — tap to open detail sheet */}
+        <Animated.View entering={FadeInDown.delay(80).duration(500).springify()}>
         <Pressable
           style={styles.completionCard}
           onPress={() => { haptics.light(); setShowCompletionDetail(true); }}
@@ -241,18 +244,24 @@ export function DashboardScreen() {
             <View style={styles.completionStat}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>XP Today</AText><AText variant="subheading" weight="bold" style={{ color: colors.primary.default }}>+{todayXP}</AText></View>
           </View>
         </Pressable>
+        </Animated.View>
 
         {/* Daily Challenge */}
-        <DailyChallengeCard />
+        <Animated.View entering={FadeInDown.delay(160).duration(500).springify()}>
+          <DailyChallengeCard />
+        </Animated.View>
 
         {/* Weekly Boss */}
-        <WeeklyBossCard />
+        <Animated.View entering={FadeInDown.delay(240).duration(500).springify()}>
+          <WeeklyBossCard />
+        </Animated.View>
 
         {/* Active Quests */}
+        <Animated.View entering={FadeInDown.delay(280).duration(500).springify()}>
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitle}><Ionicons name="radio-button-on" size={18} color={colors.primary.default} /><AText variant="caption" weight="bold" uppercase style={styles.sectionLabel}>Active Quests</AText></View>
-            <Pressable><AText variant="caption" style={{ color: colors.primary.default, letterSpacing: 1 }}>View All</AText></Pressable>
+            <Pressable onPress={() => navigation.navigate('Tasks')}><AText variant="caption" style={{ color: colors.primary.default, letterSpacing: 1 }}>View All</AText></Pressable>
           </View>
           <View style={styles.questList}>
             {activeTasks.slice(0, 3).map((task) => (
@@ -271,32 +280,34 @@ export function DashboardScreen() {
             )}
           </View>
         </View>
+        </Animated.View>
 
         {/* System Metrics */}
+        <Animated.View entering={FadeInDown.delay(320).duration(500).springify()}>
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitle}><Ionicons name="analytics-outline" size={18} color={colors.secondary.default} /><AText variant="caption" weight="bold" uppercase style={styles.sectionLabel}>System Metrics</AText></View>
           </View>
           <View style={styles.metricsGrid}>
-            {METRIC_CONFIG.map((m) => {
-              const catTasks  = todaysTasks().filter((t) => t.category === m.category);
-              const catDone   = catTasks.filter((t) => t.status === 'completed').length;
-              const catRate   = catTasks.length > 0 ? catDone / catTasks.length : 0;
+            {categories.map((cat) => {
+              const catTasks = todaysTasks().filter((t) => t.category === cat.id);
+              const catDone  = catTasks.filter((t) => t.status === 'completed').length;
+              const catRate  = catTasks.length > 0 ? catDone / catTasks.length : 0;
               return (
                 <MetricRing
-                  key={m.category}
-                  label={m.label}
+                  key={cat.id}
+                  label={cat.name}
                   value={catRate}
-                  color={m.color}
-                  icon={m.icon}
-                  highlight={m.highlight}
-                  streak={categoryStreaks[m.category] ?? 0}
-                  onPress={() => { haptics.light(); setSelectedMetric(m); }}
+                  color={cat.color}
+                  icon={cat.icon as keyof typeof Ionicons.glyphMap}
+                  streak={categoryStreaks[cat.id] ?? 0}
+                  onPress={() => { haptics.light(); setSelectedMetric(cat); }}
                 />
               );
             })}
           </View>
         </View>
+        </Animated.View>
 
         <View style={{ height: spacing[12] }} />
       </ScrollView>
@@ -308,35 +319,50 @@ export function DashboardScreen() {
         <MetricDetailSheet
           visible={!!selectedMetric}
           onClose={() => setSelectedMetric(null)}
-          category={selectedMetric.category}
-          label={selectedMetric.label}
+          category={selectedMetric.id}
+          label={selectedMetric.name}
           color={selectedMetric.color}
-          icon={selectedMetric.icon}
+          icon={selectedMetric.icon as keyof typeof Ionicons.glyphMap}
         />
       )}
+      <CreateTaskModal visible={showCreateTask} onClose={() => setShowCreateTask(false)} />
     </SafeAreaView>
   );
 }
 
-function MetricRing({ label, value, color, icon, highlight = false, streak = 0, onPress }: {
+function MetricRing({ label, value, color, icon, streak = 0, onPress }: {
   label: string; value: number; color: string;
-  icon: keyof typeof Ionicons.glyphMap; highlight?: boolean; streak?: number; onPress?: () => void;
+  icon: keyof typeof Ionicons.glyphMap; streak?: number; onPress?: () => void;
 }) {
+  const glowAlpha  = Math.round(value * 55).toString(16).padStart(2, '0');
+  const borderAlpha = Math.round(value * 90).toString(16).padStart(2, '0');
+  const glowSize   = Math.round(value * 18);
+  const glowSpread = Math.round(value * 5);
+  const webGlow    = Platform.OS === 'web' && value > 0.05
+    ? { boxShadow: `0 0 ${glowSize}px ${glowSpread}px ${color}${glowAlpha}` } as any
+    : {};
+
   return (
     <Pressable
-      style={[styles.metricCard, highlight && { borderColor: color + '30' }]}
+      style={[
+        styles.metricCard,
+        { borderColor: value > 0.05 ? color + borderAlpha : colors.border.subtle },
+        webGlow,
+      ]}
       onPress={onPress}
     >
-      {highlight && <View style={[styles.metricGlow, { backgroundColor: color + '15' }]} />}
+      {value > 0.05 && (
+        <View style={[styles.metricGlow, { backgroundColor: color + Math.round(value * 20).toString(16).padStart(2, '0') }]} />
+      )}
       <CircularProgress size={80} progress={value} strokeWidth={6} color={color} trackColor="#1a1a1a">
         <View style={{ alignItems: 'center' }}>
-          <AText variant="caption" weight="bold" style={{ color: colors.white, fontSize: 13 }}>
+          <AText variant="caption" weight="bold" style={{ color: value > 0 ? colors.white : colors.text.faint, fontSize: 13 }}>
             {Math.round(value * 100)}%
           </AText>
-          <Ionicons name={icon} size={12} color={colors.text.muted} style={{ marginTop: 2 }} />
+          <Ionicons name={icon} size={12} color={value > 0 ? color : colors.text.faint} style={{ marginTop: 2 }} />
         </View>
       </CircularProgress>
-      <AText variant="label" uppercase style={{ color: highlight ? colors.white : colors.text.muted, letterSpacing: 2, fontSize: 9, fontFamily: highlight ? fontFamily.bold : fontFamily.medium }}>
+      <AText variant="label" uppercase style={{ color: value > 0 ? colors.white : colors.text.muted, letterSpacing: 2, fontSize: 9, fontFamily: value > 0 ? fontFamily.bold : fontFamily.medium }}>
         {label}
       </AText>
       {streak > 1 && (
@@ -352,8 +378,10 @@ function MetricRing({ label, value, color, icon, highlight = false, streak = 0, 
 const styles = StyleSheet.create({
   container:  { flex: 1, backgroundColor: colors.bg.primary },
   ambientTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 300, zIndex: 0 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing[5], paddingVertical: spacing[4], zIndex: 10, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  header:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing[5], paddingVertical: spacing[4], zIndex: 10, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  headerLeft:  { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  quickAddBtn: { width: 34, height: 34, borderRadius: radius.full, backgroundColor: colors.primary.faint, borderWidth: 1, borderColor: colors.primary.container + '50', alignItems: 'center', justifyContent: 'center' },
   avatar: { width: 36, height: 36, borderRadius: radius.full, backgroundColor: colors.bg.high, borderWidth: 1, borderColor: colors.border.outline, alignItems: 'center', justifyContent: 'center' },
   logo: { color: colors.primary.default + 'E6', letterSpacing: 4, fontSize: 16 },
   rankPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing[3], paddingVertical: spacing[1], borderRadius: radius.full, backgroundColor: colors.primary.faint, borderWidth: 1, borderColor: colors.primary.default + '40' },

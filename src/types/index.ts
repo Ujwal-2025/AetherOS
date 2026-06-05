@@ -13,7 +13,7 @@ export interface RankThreshold {
 
 export type TaskPriority  = 'low' | 'medium' | 'high' | 'critical';
 export type TaskStatus    = 'pending' | 'in_progress' | 'completed' | 'failed';
-export type TaskCategory  = 'health' | 'work' | 'learning' | 'personal' | 'custom';
+export type TaskCategory  = string;
 export type RecurrenceType = 'none' | 'daily' | 'weekly' | 'monthly';
 
 export interface Task {

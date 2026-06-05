@@ -15,13 +15,15 @@ const PRIORITY_META: Record<TaskPriority, { color: string; label: string }> = {
   critical: { color: colors.danger.default,    label: 'CRIT' },
 };
 
-const CATEGORY_ICONS: Record<TaskCategory, keyof typeof Ionicons.glyphMap> = {
+const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   work:     'briefcase-outline',
   health:   'fitness-outline',
   learning: 'book-outline',
   personal: 'person-outline',
-  custom:   'star-outline',
 };
+function getCategoryIcon(cat: string): keyof typeof Ionicons.glyphMap {
+  return CATEGORY_ICONS[cat] ?? 'star-outline';
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -59,7 +61,7 @@ export function QuestCard({ task, onStart, onComplete }: QuestCardProps) {
         {/* Title row */}
         <View style={styles.titleRow}>
           <Ionicons
-            name={CATEGORY_ICONS[task.category]}
+            name={getCategoryIcon(task.category)}
             size={14}
             color={isCompleted ? colors.text.faint : colors.text.muted}
           />

@@ -84,11 +84,8 @@ export function TasksScreen() {
       <View style={styles.header}>
         <View>
           <AText variant="heading" weight="bold" style={styles.title}>Quests</AText>
-          <AText variant="caption" color="muted" style={{ marginTop: 2 }}>{allActive.length} active · {completedList.length} done today</AText>
+          <AText variant="caption" color="muted" style={{ marginTop: 2 }}>{allActive.length} pending · {completedList.length} done today</AText>
         </View>
-        <Pressable style={styles.addBtn} onPress={() => { haptics.light(); setShowCreate(true); }}>
-          <Ionicons name="add" size={22} color={colors.primary.default} />
-        </Pressable>
       </View>
 
       {comboMultiplier > 1.0 && (

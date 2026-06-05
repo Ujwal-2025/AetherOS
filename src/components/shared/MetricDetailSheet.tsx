@@ -10,7 +10,7 @@ import { colors, spacing, radius, fontFamily } from '../../theme';
 import { AText } from '../ui/AText';
 import { CircularProgress } from './CircularProgress';
 import { useTaskStore } from '../../store/useTaskStore';
-import { Task, TaskCategory, TaskPriority } from '../../types';
+import { Task, TaskPriority } from '../../types';
 
 // ─── Priority badge ───────────────────────────────────────────────────────────
 
@@ -104,7 +104,7 @@ const secStyles = StyleSheet.create({
 interface MetricDetailSheetProps {
   visible:  boolean;
   onClose:  () => void;
-  category: TaskCategory;
+  category: string;
   label:    string;
   color:    string;
   icon:     keyof typeof Ionicons.glyphMap;
