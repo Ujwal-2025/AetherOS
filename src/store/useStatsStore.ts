@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { DayStats } from '../types';
 
 function getTodayString() { return new Date().toISOString().split('T')[0]; }
@@ -28,7 +29,9 @@ interface StatsState {
   getLast28Days:  () => DayStats[];
 }
 
-export const useStatsStore = create<StatsState>((set, get) => ({
+export const useStatsStore = create<StatsState>()(
+  persist(
+  (set, get) => ({
   days:             [],
   deepWorkSessions: 0,
 
@@ -48,4 +51,9 @@ export const useStatsStore = create<StatsState>((set, get) => ({
 
   getDay:        (date) => get().days.find((d) => d.date === date) ?? EMPTY_DAY(date),
   getLast28Days: () => last28Days().map((date) => get().days.find((d) => d.date === date) ?? EMPTY_DAY(date)),
-}));
+  }),
+  {
+    name: 'aetheros-stats',
+    partialize: (state) => ({ days: state.days, deepWorkSessions: state.deepWorkSessions }),
+  }
+));

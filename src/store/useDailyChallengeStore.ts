@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { TaskCategory } from '../types';
 
 export interface DailyChallenge {
@@ -48,7 +49,9 @@ interface DailyChallengeState {
   refreshIfNewDay: () => void;
 }
 
-export const useDailyChallengeStore = create<DailyChallengeState>((set, get) => ({
+export const useDailyChallengeStore = create<DailyChallengeState>()(
+  persist(
+  (set, get) => ({
   challenge: getTodayChallenge(),
 
   logFocusMinutes: (minutes) => {
@@ -65,4 +68,9 @@ export const useDailyChallengeStore = create<DailyChallengeState>((set, get) => 
   refreshIfNewDay: () => {
     if (get().challenge.date !== getTodayString()) set({ challenge: getTodayChallenge() });
   },
-}));
+  }),
+  {
+    name:       'aetheros-daily-challenge',
+    partialize: (state) => ({ challenge: state.challenge }),
+  }
+));

@@ -14,6 +14,7 @@ import { QuestCard } from '../components/shared/QuestCard';
 import { RankUpOverlay } from '../components/shared/RankUpOverlay';
 import { DailyChallengeCard } from '../components/shared/DailyChallengeCard';
 import { DailyCompletionSheet } from '../components/shared/DailyCompletionSheet';
+import { MetricDetailSheet } from '../components/shared/MetricDetailSheet';
 import { useUserStore } from '../store/useUserStore';
 import { useTaskStore } from '../store/useTaskStore';
 import { useFocusStore } from '../store/useFocusStore';
@@ -21,7 +22,7 @@ import { useAchievementStore } from '../store/useAchievementStore';
 import { useStatsStore } from '../store/useStatsStore';
 import { getRankThreshold, getNextRankThreshold } from '../utils/xp';
 import { haptics } from '../utils/haptics';
-import { MainTabParamList, FocusMode, Task } from '../types';
+import { MainTabParamList, FocusMode, Task, TaskCategory } from '../types';
 
 // Derive focus mode from a task's estimated duration
 function modeFromDuration(minutes?: number): FocusMode {
@@ -29,6 +30,22 @@ function modeFromDuration(minutes?: number): FocusMode {
   if (minutes <= 60)             return 'flow';
   return 'deep';
 }
+
+// ─── Metric config — each card maps 1:1 to a TaskCategory ────────────────────
+type MetricConfig = {
+  label:     string;
+  category:  TaskCategory;
+  color:     string;
+  icon:      keyof typeof Ionicons.glyphMap;
+  highlight: boolean;
+};
+
+const METRIC_CONFIG: MetricConfig[] = [
+  { label: 'Work',     category: 'work',     color: colors.primary.default,   icon: 'code-slash-outline', highlight: false },
+  { label: 'Health',   category: 'health',   color: colors.secondary.default, icon: 'fitness-outline',    highlight: true  },
+  { label: 'Learning', category: 'learning', color: colors.success.default,   icon: 'book-outline',       highlight: false },
+  { label: 'Personal', category: 'personal', color: colors.warning.default,   icon: 'person-outline',     highlight: false },
+];
 
 export function DashboardScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
@@ -40,6 +57,7 @@ export function DashboardScreen() {
   const { recordActivity, deepWorkSessions } = useStatsStore();
 
   const [showCompletionDetail, setShowCompletionDetail] = useState(false);
+  const [selectedMetric,       setSelectedMetric]       = useState<MetricConfig | null>(null);
 
   const rankInfo       = getRankThreshold(rank);
   const nextRank       = getNextRankThreshold(rank);
@@ -231,10 +249,22 @@ export function DashboardScreen() {
             <View style={styles.sectionTitle}><Ionicons name="analytics-outline" size={18} color={colors.secondary.default} /><AText variant="caption" weight="bold" uppercase style={styles.sectionLabel}>System Metrics</AText></View>
           </View>
           <View style={styles.metricsGrid}>
-            <MetricRing label="Work"     value={0.60} color={colors.primary.default}    icon="code-slash-outline" />
-            <MetricRing label="Health"   value={0.90} color={colors.secondary.default}  icon="fitness-outline"    highlight />
-            <MetricRing label="Learning" value={0.75} color={colors.success.default}    icon="book-outline" />
-            <MetricRing label="Focus"    value={0.40} color={colors.warning.default}    icon="timer-outline" />
+            {METRIC_CONFIG.map((m) => {
+              const catTasks  = todaysTasks().filter((t) => t.category === m.category);
+              const catDone   = catTasks.filter((t) => t.status === 'completed').length;
+              const catRate   = catTasks.length > 0 ? catDone / catTasks.length : 0;
+              return (
+                <MetricRing
+                  key={m.category}
+                  label={m.label}
+                  value={catRate}
+                  color={m.color}
+                  icon={m.icon}
+                  highlight={m.highlight}
+                  onPress={() => { haptics.light(); setSelectedMetric(m); }}
+                />
+              );
+            })}
           </View>
         </View>
 
@@ -243,22 +273,42 @@ export function DashboardScreen() {
 
       <RankUpOverlay rank={pendingRankUp ?? 'E'} visible={pendingRankUp !== null} onDismiss={clearRankUp} />
       <DailyCompletionSheet visible={showCompletionDetail} onClose={() => setShowCompletionDetail(false)} />
+      {selectedMetric && (
+        <MetricDetailSheet
+          visible={!!selectedMetric}
+          onClose={() => setSelectedMetric(null)}
+          category={selectedMetric.category}
+          label={selectedMetric.label}
+          color={selectedMetric.color}
+          icon={selectedMetric.icon}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
-function MetricRing({ label, value, color, icon, highlight = false }: { label: string; value: number; color: string; icon: keyof typeof Ionicons.glyphMap; highlight?: boolean }) {
+function MetricRing({ label, value, color, icon, highlight = false, onPress }: {
+  label: string; value: number; color: string;
+  icon: keyof typeof Ionicons.glyphMap; highlight?: boolean; onPress?: () => void;
+}) {
   return (
-    <View style={[styles.metricCard, highlight && { borderColor: color + '30' }]}>
+    <Pressable
+      style={[styles.metricCard, highlight && { borderColor: color + '30' }]}
+      onPress={onPress}
+    >
       {highlight && <View style={[styles.metricGlow, { backgroundColor: color + '15' }]} />}
       <CircularProgress size={80} progress={value} strokeWidth={6} color={color} trackColor="#1a1a1a">
         <View style={{ alignItems: 'center' }}>
-          <AText variant="caption" weight="bold" style={{ color: colors.white, fontSize: 13 }}>{Math.round(value * 100)}%</AText>
+          <AText variant="caption" weight="bold" style={{ color: colors.white, fontSize: 13 }}>
+            {Math.round(value * 100)}%
+          </AText>
           <Ionicons name={icon} size={12} color={colors.text.muted} style={{ marginTop: 2 }} />
         </View>
       </CircularProgress>
-      <AText variant="label" uppercase style={{ color: highlight ? colors.white : colors.text.muted, letterSpacing: 2, fontSize: 9, fontFamily: highlight ? fontFamily.bold : fontFamily.medium }}>{label}</AText>
-    </View>
+      <AText variant="label" uppercase style={{ color: highlight ? colors.white : colors.text.muted, letterSpacing: 2, fontSize: 9, fontFamily: highlight ? fontFamily.bold : fontFamily.medium }}>
+        {label}
+      </AText>
+    </Pressable>
   );
 }
 

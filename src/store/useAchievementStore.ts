@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { Rank } from '../types';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -58,7 +59,9 @@ interface AchievementState {
   getLocked:          () => Achievement[];
 }
 
-export const useAchievementStore = create<AchievementState>((set, get) => ({
+export const useAchievementStore = create<AchievementState>()(
+  persist(
+  (set, get) => ({
   achievements:  ACHIEVEMENTS,
   pendingUnlock: null,
 
@@ -109,4 +112,9 @@ export const useAchievementStore = create<AchievementState>((set, get) => ({
   clearPendingUnlock: () => set({ pendingUnlock: null }),
   getUnlocked: () => get().achievements.filter((a) => !!a.unlockedAt),
   getLocked:   () => get().achievements.filter((a) => !a.unlockedAt),
-}));
+  }),
+  {
+    name:       'aetheros-achievements',
+    partialize: (state) => ({ achievements: state.achievements }),
+  }
+));
