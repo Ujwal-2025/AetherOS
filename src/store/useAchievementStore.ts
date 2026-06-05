@@ -51,19 +51,19 @@ const ACHIEVEMENTS: Achievement[] = [
 ];
 
 interface AchievementState {
-  achievements:       Achievement[];
-  pendingUnlock:      Achievement | null;
-  checkAchievements:  (input: AchievementCheckInput) => void;
-  clearPendingUnlock: () => void;
-  getUnlocked:        () => Achievement[];
-  getLocked:          () => Achievement[];
+  achievements:        Achievement[];
+  pendingUnlockQueue:  Achievement[];
+  checkAchievements:   (input: AchievementCheckInput) => void;
+  dequeueUnlock:       () => void;
+  getUnlocked:         () => Achievement[];
+  getLocked:           () => Achievement[];
 }
 
 export const useAchievementStore = create<AchievementState>()(
   persist(
   (set, get) => ({
-  achievements:  ACHIEVEMENTS,
-  pendingUnlock: null,
+  achievements:       ACHIEVEMENTS,
+  pendingUnlockQueue: [],
 
   checkAchievements: (input) => {
     const { achievements } = get();
@@ -105,11 +105,14 @@ export const useAchievementStore = create<AchievementState>()(
     const updatedAchievements = achievements.map((a) =>
       toUnlock.some((u) => u.id === a.id) ? { ...a, unlockedAt: now } : a
     );
-    const firstUnlock = updatedAchievements.find((a) => toUnlock.some((u) => u.id === a.id));
-    set({ achievements: updatedAchievements, pendingUnlock: firstUnlock ?? null });
+    const newlyUnlocked = updatedAchievements.filter((a) => toUnlock.some((u) => u.id === a.id));
+    set((state) => ({
+      achievements:       updatedAchievements,
+      pendingUnlockQueue: [...state.pendingUnlockQueue, ...newlyUnlocked],
+    }));
   },
 
-  clearPendingUnlock: () => set({ pendingUnlock: null }),
+  dequeueUnlock: () => set((state) => ({ pendingUnlockQueue: state.pendingUnlockQueue.slice(1) })),
   getUnlocked: () => get().achievements.filter((a) => !!a.unlockedAt),
   getLocked:   () => get().achievements.filter((a) => !a.unlockedAt),
   }),

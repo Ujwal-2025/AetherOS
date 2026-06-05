@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Pressable, StyleSheet, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,9 @@ import { FocusScreen } from '../screens/FocusScreen';
 import { RewardsScreen } from '../screens/RewardsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { MainTabParamList } from '../types';
+import { useAchievementStore } from '../store/useAchievementStore';
+import { useTaskStore } from '../store/useTaskStore';
+import { AchievementToast } from '../components/shared/AchievementToast';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -50,7 +53,15 @@ function TabLabel({ label, focused }: { label: string; focused: boolean }) {
 // ─── Navigator ────────────────────────────────────────────────────────────────
 
 export function MainNavigator() {
+  const { pendingUnlockQueue, dequeueUnlock } = useAchievementStore();
+  const { resetDailyTasks } = useTaskStore();
+
+  useEffect(() => {
+    resetDailyTasks();
+  }, []);
+
   return (
+    <View style={{ flex: 1 }}>
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
@@ -116,6 +127,11 @@ export function MainNavigator() {
         }}
       />
     </Tab.Navigator>
+      <AchievementToast
+        achievement={pendingUnlockQueue[0] ?? null}
+        onHide={dequeueUnlock}
+      />
+    </View>
   );
 }
 

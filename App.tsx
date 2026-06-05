@@ -17,13 +17,6 @@ import {
 } from '@expo-google-fonts/inter';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation/RootNavigator';
-import { AchievementToast } from './src/components/shared/AchievementToast';
-import { useAchievementStore } from './src/store/useAchievementStore';
-
-function GlobalOverlays() {
-  const { pendingUnlock, clearPendingUnlock } = useAchievementStore();
-  return <AchievementToast achievement={pendingUnlock} onHide={clearPendingUnlock} />;
-}
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -42,7 +35,6 @@ export default function App() {
       <SafeAreaProvider>
         <StatusBar style="light" />
         <RootNavigator />
-        <GlobalOverlays />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

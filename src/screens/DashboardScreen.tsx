@@ -53,7 +53,7 @@ export function DashboardScreen() {
           addXP, incrementTasksCompleted, incrementCombo } = useUserStore();
   const { todaysTasks, completedToday, completionRateToday, xpEarnedToday, completeTask } = useTaskStore();
   const { setPendingTask } = useFocusStore();
-  const { checkAchievements } = useAchievementStore();
+  const { checkAchievements, getUnlocked } = useAchievementStore();
   const { recordActivity, deepWorkSessions } = useStatsStore();
 
   const [showCompletionDetail, setShowCompletionDetail] = useState(false);
@@ -67,6 +67,8 @@ export function DashboardScreen() {
   const completionRate = completionRateToday();
   const todayXP        = xpEarnedToday();
   const nextRankXP     = nextRank ? nextRank.minXP : profile.totalXP;
+  const level          = Math.floor(profile.totalXP / 1000) + 1;
+  const medalCount     = getUnlocked().length;
 
   // Streak danger zone — after 9 PM with zero tasks done
   const hour         = new Date().getHours();
@@ -156,7 +158,7 @@ export function DashboardScreen() {
               <CircularProgress size={192} progress={rankProgress} strokeWidth={6} gradientColors={[colors.primary.default, colors.secondary.default]} trackColor="#2a2a2a">
                 <View style={styles.levelCenter}>
                   <AText variant="label" color="muted" uppercase style={{ letterSpacing: 2 }}>Level</AText>
-                  <AText variant="display" weight="bold" style={styles.levelNumber}>42</AText>
+                  <AText variant="display" weight="bold" style={styles.levelNumber}>{level}</AText>
                 </View>
               </CircularProgress>
             </View>
@@ -184,8 +186,8 @@ export function DashboardScreen() {
             </View>
           </View>
           <View style={styles.heroBadges}>
-            <View style={styles.heroBadge}><Ionicons name="flash" size={22} color={colors.primary.default} /><View><AText variant="subheading" weight="bold" style={styles.badgeNumber}>3</AText><AText variant="label" color="muted" style={{ fontSize: 9, letterSpacing: 1 }}>ACTIVE</AText></View></View>
-            <View style={styles.heroBadge}><Ionicons name="ribbon" size={22} color={colors.text.muted} /><View><AText variant="subheading" weight="bold" style={styles.badgeNumber}>12</AText><AText variant="label" color="muted" style={{ fontSize: 9, letterSpacing: 1 }}>MEDALS</AText></View></View>
+            <View style={styles.heroBadge}><Ionicons name="flash" size={22} color={colors.primary.default} /><View><AText variant="subheading" weight="bold" style={styles.badgeNumber}>{activeTasks.length}</AText><AText variant="label" color="muted" style={{ fontSize: 9, letterSpacing: 1 }}>ACTIVE</AText></View></View>
+            <View style={styles.heroBadge}><Ionicons name="ribbon" size={22} color={colors.text.muted} /><View><AText variant="subheading" weight="bold" style={styles.badgeNumber}>{medalCount}</AText><AText variant="label" color="muted" style={{ fontSize: 9, letterSpacing: 1 }}>MEDALS</AText></View></View>
           </View>
         </View>
 

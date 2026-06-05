@@ -92,6 +92,7 @@ interface TaskState {
   completedToday:      () => Task[];
   completionRateToday: () => number;
   xpEarnedToday:       () => number;
+  resetDailyTasks:     () => void;
 }
 
 export const useTaskStore = create<TaskState>()(
@@ -158,6 +159,21 @@ export const useTaskStore = create<TaskState>()(
 
       xpEarnedToday: () =>
         get().completedToday().reduce((sum, t) => sum + t.xpReward, 0),
+
+      resetDailyTasks: () => {
+        const today = getTodayString();
+        set((state) => ({
+          tasks: state.tasks.map((t) => {
+            if (t.recurrence === 'daily' && t.status === 'completed' && t.completedAt) {
+              const completedDay = new Date(t.completedAt).toISOString().split('T')[0];
+              if (completedDay !== today) {
+                return { ...t, status: 'pending', completedAt: undefined };
+              }
+            }
+            return t;
+          }),
+        }));
+      },
     }),
     {
       name:       'aetheros-tasks',
