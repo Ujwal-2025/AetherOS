@@ -2,23 +2,27 @@ import { useState } from 'react'
 import { useInView } from '../hooks/useInView'
 
 export function Waitlist() {
-  const { ref, isVisible } = useInView()
-  const [email, setEmail] = useState('')
-  const [state, setState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
-
-  const formId = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_FORMSPREE_ID
+  const { ref, isVisible }                    = useInView()
+  const [email, setEmail]                     = useState('')
+  const [state, setState]                     = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const formId: string | undefined            = (import.meta as any).env?.VITE_FORMSPREE_ID
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!email.trim() || state === 'loading' || state === 'done') return
     setState('loading')
     try {
-      const res = await fetch(`https://formspree.io/f/${formId}`, {
+      const endpoint = formId
+        ? `https://formspree.io/f/${formId}`
+        : null
+      if (!endpoint) throw new Error('no_form_id')
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ email }),
       })
-      if (!res.ok) throw new Error()
+      if (!res.ok) throw new Error('submit_failed')
       setState('done')
     } catch {
       setState('error')
@@ -29,12 +33,8 @@ export function Waitlist() {
     <section
       id="waitlist"
       className="section"
-      style={{
-        background: 'linear-gradient(180deg, var(--bg-primary) 0%, #0a0515 50%, var(--bg-primary) 100%)',
-        position: 'relative', overflow: 'hidden',
-      }}
+      style={{ background: 'linear-gradient(180deg, var(--bg-primary) 0%, #0a0515 50%, var(--bg-primary) 100%)', position: 'relative', overflow: 'hidden' }}
     >
-      {/* Big ambient glow */}
       <div style={{
         position: 'absolute', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
@@ -49,11 +49,10 @@ export function Waitlist() {
         >
           <div className="eyebrow" style={{ justifyContent: 'center' }}>Early Access</div>
           <h2 style={{
-            fontSize: 'clamp(32px, 5vw, 52px)', fontWeight: 700,
+            fontSize: 'clamp(28px, 5vw, 52px)', fontWeight: 700,
             letterSpacing: '-0.5px', lineHeight: 1.1, marginBottom: 16,
             background: 'linear-gradient(135deg, #fff 20%, var(--primary) 100%)',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-            textShadow: 'none',
           }}>
             JOIN THE HUNT
           </h2>
@@ -76,9 +75,10 @@ export function Waitlist() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', maxWidth: 480, margin: '0 auto' }}>
+              <label htmlFor="waitlist-email" className="sr-only">Email address</label>
               <input
-                type="email"
-                required
+                id="waitlist-email"
+                type="email" required
                 placeholder="your@email.com"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
@@ -86,11 +86,10 @@ export function Waitlist() {
                   flex: '1 1 200px', padding: '14px 20px',
                   background: 'var(--bg-surface)', border: '1px solid var(--border-medium)',
                   borderRadius: 9999, color: 'var(--text-primary)',
-                  fontSize: 15, outline: 'none',
-                  transition: 'border-color 0.2s',
+                  fontSize: 15, outline: 'none', transition: 'border-color 0.2s',
                 }}
-                onFocus={e => { e.currentTarget.style.borderColor = 'rgba(183,109,255,0.50)' }}
-                onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-medium)' }}
+                onFocus={e  => { e.currentTarget.style.borderColor = 'rgba(183,109,255,0.50)' }}
+                onBlur={e   => { e.currentTarget.style.borderColor = 'var(--border-medium)' }}
               />
               <button
                 type="submit"
@@ -106,8 +105,8 @@ export function Waitlist() {
           )}
 
           {state === 'error' && (
-            <p style={{ fontSize: 13, color: 'var(--danger)', marginTop: 12 }}>
-              Something went wrong. Try again in a moment.
+            <p role="alert" style={{ fontSize: 13, color: 'var(--danger)', marginTop: 12 }}>
+              Something went wrong. Check your connection and try again.
             </p>
           )}
 
