@@ -75,9 +75,8 @@ Build my structured quest plan. Use web search to find the best approach for thi
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user',   content: userMessage },
     ],
-    temperature:       0.6,
-    max_tokens:        1500,
-    response_format:   { type: 'json_object' },
+    temperature: 0.6,
+    max_tokens:  1500,
   }
 
   try {
@@ -97,7 +96,9 @@ Build my structured quest plan. Use web search to find the best approach for thi
     }
 
     const groqData = await groqRes.json()
-    const text     = groqData?.choices?.[0]?.message?.content ?? ''
+    const raw      = groqData?.choices?.[0]?.message?.content ?? ''
+    // strip markdown code fences if model wraps the JSON
+    const text     = raw.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim()
     const plan     = JSON.parse(text)
 
     // Validate required keys
