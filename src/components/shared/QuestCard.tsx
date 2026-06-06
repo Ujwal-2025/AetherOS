@@ -1,6 +1,7 @@
-import React from 'react';
-import { StyleSheet, Pressable, Platform } from 'react-native';
+import React, { useRef } from 'react';
+import { StyleSheet, Pressable, Platform, Animated, View as RNView } from 'react-native';
 import { View } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontFamily } from '../../theme';
 import { AText } from '../ui/AText';
@@ -27,10 +28,35 @@ interface QuestCardProps {
 }
 
 export function QuestCard({ task, onStart, onComplete, onDelete, onEdit }: QuestCardProps) {
-  const pm          = PRIORITY_META[task.priority];
-  const isCompleted = task.status === 'completed';
+  const pm           = PRIORITY_META[task.priority];
+  const isCompleted  = task.status === 'completed';
   const { getCategory } = useCategoryStore();
   const catIcon = (getCategory(task.category)?.icon ?? 'star-outline') as keyof typeof Ionicons.glyphMap;
+  const swipeRef = useRef<Swipeable>(null);
+
+  function renderRightActions(progress: Animated.AnimatedInterpolation<number>) {
+    const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [80, 0] });
+    return (
+      <Animated.View style={[styles.swipeActions, { transform: [{ translateX }] }]}>
+        {onEdit && (
+          <Pressable
+            style={[styles.swipeBtn, styles.editBtn]}
+            onPress={() => { swipeRef.current?.close(); onEdit(); }}
+          >
+            <Ionicons name="pencil-outline" size={18} color={colors.secondary.default} />
+          </Pressable>
+        )}
+        {onDelete && !isCompleted && (
+          <Pressable
+            style={[styles.swipeBtn, styles.deleteBtn]}
+            onPress={() => { swipeRef.current?.close(); onDelete(); }}
+          >
+            <Ionicons name="trash-outline" size={18} color={colors.danger.default} />
+          </Pressable>
+        )}
+      </Animated.View>
+    );
+  }
 
   const glowStyle = !isCompleted && Platform.OS === 'web'
     ? { boxShadow: `0 0 0 1px ${pm.color}18` }
@@ -42,6 +68,12 @@ export function QuestCard({ task, onStart, onComplete, onDelete, onEdit }: Quest
   }
 
   return (
+    <Swipeable
+      ref={swipeRef}
+      renderRightActions={(onDelete || onEdit) && !isCompleted ? renderRightActions : undefined}
+      overshootRight={false}
+      friction={2}
+    >
     <Pressable
       style={[styles.card, isCompleted && styles.cardDone, glowStyle]}
       onPress={handleCardPress}
@@ -118,6 +150,7 @@ export function QuestCard({ task, onStart, onComplete, onDelete, onEdit }: Quest
         )}
       </View>
     </Pressable>
+    </Swipeable>
   );
 }
 
@@ -227,4 +260,19 @@ const styles = StyleSheet.create({
   doneIcon: {
     paddingHorizontal: spacing[2],
   },
+  swipeActions: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    paddingLeft:    spacing[2],
+  },
+  swipeBtn: {
+    width:          52,
+    height:         '100%' as any,
+    alignItems:     'center',
+    justifyContent: 'center',
+    borderRadius:   radius.xl,
+    marginLeft:     spacing[1],
+  },
+  editBtn:   { backgroundColor: colors.secondary.default + '18' },
+  deleteBtn: { backgroundColor: colors.danger.default + '18' },
 });

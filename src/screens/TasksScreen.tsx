@@ -7,6 +7,7 @@ import { AText } from '../components/ui/AText';
 import { QuestCard } from '../components/shared/QuestCard';
 import { FilterTabs } from '../components/shared/FilterTabs';
 import { CreateTaskModal } from '../components/shared/CreateTaskModal';
+import { EditTaskModal } from '../components/shared/EditTaskModal';
 import { XPFlyOut } from '../components/shared/XPFlyOut';
 import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -31,6 +32,7 @@ export function TasksScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
   const [filter,     setFilter]    = useState<FilterKey>('today');
   const [showCreate, setShowCreate] = useState(false);
+  const [editTask,   setEditTask]   = useState<Task | null>(null);
   const [flyOutXP,   setFlyOutXP]  = useState<number | null>(null);
 
   const { tasks, todaysTasks, completedToday, completeTask, deleteTask } = useTaskStore();
@@ -103,11 +105,13 @@ export function TasksScreen() {
         ) : (
           filtered.map((task) => (
             <QuestCard
-                key={task.id}
-                task={task}
-                onStart={task.status !== 'completed' ? () => handleStartTask(task) : undefined}
-                onComplete={task.status !== 'completed' ? () => handleComplete(task.id) : undefined}
-              />
+              key={task.id}
+              task={task}
+              onStart={task.status !== 'completed' ? () => handleStartTask(task) : undefined}
+              onComplete={task.status !== 'completed' ? () => handleComplete(task.id) : undefined}
+              onEdit={task.status !== 'completed' ? () => setEditTask(task) : undefined}
+              onDelete={task.status !== 'completed' ? () => deleteTask(task.id) : undefined}
+            />
           ))
         )}
         <View style={{ height: spacing[16] }} />
@@ -120,6 +124,9 @@ export function TasksScreen() {
       </Pressable>
 
       <CreateTaskModal visible={showCreate} onClose={() => setShowCreate(false)} />
+      {editTask && (
+        <EditTaskModal visible={!!editTask} task={editTask} onClose={() => setEditTask(null)} />
+      )}
     </SafeAreaView>
   );
 }
