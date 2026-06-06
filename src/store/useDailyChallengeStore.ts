@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TaskCategory } from '../types';
 
 export interface DailyChallenge {
@@ -43,9 +44,9 @@ function getTodayChallenge(): DailyChallenge {
 }
 
 interface DailyChallengeState {
-  challenge:      DailyChallenge;
-  logFocusMinutes: (minutes: number) => void;
-  markComplete:   () => void;
+  challenge:       DailyChallenge;
+  logFocusMinutes: (minutes: number) => number; // returns bonusXP if just completed, else 0
+  markComplete:    () => void;
   refreshIfNewDay: () => void;
 }
 
@@ -56,10 +57,12 @@ export const useDailyChallengeStore = create<DailyChallengeState>()(
 
   logFocusMinutes: (minutes) => {
     const { challenge } = get();
-    if (challenge.isComplete) return;
-    if (challenge.date !== getTodayString()) { set({ challenge: getTodayChallenge() }); return; }
-    const newLogged = challenge.focusMinutesLogged + minutes;
+    if (challenge.isComplete) return 0;
+    if (challenge.date !== getTodayString()) { set({ challenge: getTodayChallenge() }); return 0; }
+    const newLogged   = challenge.focusMinutesLogged + minutes;
+    const justDone    = !challenge.isComplete && newLogged >= challenge.targetMinutes;
     set({ challenge: { ...challenge, focusMinutesLogged: newLogged, isComplete: newLogged >= challenge.targetMinutes } });
+    return justDone ? challenge.bonusXP : 0;
   },
 
   markComplete: () =>
@@ -71,6 +74,7 @@ export const useDailyChallengeStore = create<DailyChallengeState>()(
   }),
   {
     name:       'aetheros-daily-challenge',
+    storage:    createJSONStorage(() => AsyncStorage),
     partialize: (state) => ({ challenge: state.challenge }),
   }
 ));

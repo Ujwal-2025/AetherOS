@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { MainNavigator } from './MainNavigator';
+import { useUserStore } from '../store/useUserStore';
 
 export function RootNavigator() {
-  const [hasOnboarded, setHasOnboarded] = useState(false);
+  const hasOnboarded = useUserStore((s) => s.hasOnboarded);
+  const setOnboarded = useUserStore((s) => s.setOnboarded);
 
   if (!hasOnboarded) {
-    return <OnboardingScreen onComplete={() => setHasOnboarded(true)} />;
+    return <OnboardingScreen onComplete={setOnboarded} />;
   }
 
   return (

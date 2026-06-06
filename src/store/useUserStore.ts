@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserProfile, Rank } from '../types';
 import { getRankFromXP, getRankProgress, getXPToNextRank } from '../utils/xp';
 import { getTodayString, isToday, isYesterday } from '../utils/date';
@@ -18,6 +19,7 @@ interface UserState {
   comboMultiplier:     number;
   lastCompletionTime:  number;
   streakShields:       number;
+  hasOnboarded:        boolean;
 
   addXP:                   (amount: number) => void;
   checkAndUpdateStreak:    () => void;
@@ -29,16 +31,17 @@ interface UserState {
   resetCombo:              () => void;
   consumeStreakShield:     () => boolean;
   addStreakShield:         () => void;
+  setOnboarded:            () => void;
 }
 
 const DEFAULT_PROFILE: UserProfile = {
   uid:               'local',
   displayName:       'Hunter',
-  totalXP:           84500,
-  rank:              'S',
-  currentStreak:     15,
-  longestStreak:     15,
-  lastActiveDate:    getTodayString(),
+  totalXP:           0,
+  rank:              'E',
+  currentStreak:     0,
+  longestStreak:     0,
+  lastActiveDate:    '',
   tasksCompleted:    0,
   focusMinutesTotal: 0,
   createdAt:         Date.now(),
@@ -57,6 +60,7 @@ export const useUserStore = create<UserState>()(
       comboMultiplier:    1.0,
       lastCompletionTime: 0,
       streakShields:      0,
+      hasOnboarded:       false,
 
       addXP: (amount) => {
         set((state) => {
@@ -141,9 +145,12 @@ export const useUserStore = create<UserState>()(
 
       addStreakShield: () =>
         set((state) => ({ streakShields: state.streakShields + 1 })),
+
+      setOnboarded: () => set({ hasOnboarded: true }),
     }),
     {
-      name: 'aetheros-user',
+      name:    'aetheros-user',
+      storage: createJSONStorage(() => AsyncStorage),
       // pendingRankUp not persisted — ceremony shouldn't replay on refresh
       // combo not persisted — intentionally resets on app restart
       partialize: (state) => ({
@@ -152,6 +159,7 @@ export const useUserStore = create<UserState>()(
         rankProgress:  state.rankProgress,
         xpToNextRank:  state.xpToNextRank,
         streakShields: state.streakShields,
+        hasOnboarded:  state.hasOnboarded,
       }),
     }
   )

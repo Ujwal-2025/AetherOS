@@ -4,7 +4,8 @@ import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontFamily } from '../../theme';
 import { AText } from '../ui/AText';
-import { Task, TaskPriority, TaskCategory } from '../../types';
+import { Task, TaskPriority } from '../../types';
+import { useCategoryStore } from '../../store/useCategoryStore';
 
 // ─── Meta maps ────────────────────────────────────────────────────────────────
 
@@ -15,28 +16,21 @@ const PRIORITY_META: Record<TaskPriority, { color: string; label: string }> = {
   critical: { color: colors.danger.default,    label: 'CRIT' },
 };
 
-const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  work:     'briefcase-outline',
-  health:   'fitness-outline',
-  learning: 'book-outline',
-  personal: 'person-outline',
-};
-function getCategoryIcon(cat: string): keyof typeof Ionicons.glyphMap {
-  return CATEGORY_ICONS[cat] ?? 'star-outline';
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface QuestCardProps {
   task:        Task;
-  onStart?:    () => void;  // whole-card tap → start focus session
-  onComplete?: () => void;  // checkmark button → mark done
+  onStart?:    () => void;
+  onComplete?: () => void;
   onDelete?:   () => void;
+  onEdit?:     () => void;
 }
 
-export function QuestCard({ task, onStart, onComplete }: QuestCardProps) {
+export function QuestCard({ task, onStart, onComplete, onDelete, onEdit }: QuestCardProps) {
   const pm          = PRIORITY_META[task.priority];
   const isCompleted = task.status === 'completed';
+  const { getCategory } = useCategoryStore();
+  const catIcon = (getCategory(task.category)?.icon ?? 'star-outline') as keyof typeof Ionicons.glyphMap;
 
   const glowStyle = !isCompleted && Platform.OS === 'web'
     ? { boxShadow: `0 0 0 1px ${pm.color}18` }
@@ -61,7 +55,7 @@ export function QuestCard({ task, onStart, onComplete }: QuestCardProps) {
         {/* Title row */}
         <View style={styles.titleRow}>
           <Ionicons
-            name={getCategoryIcon(task.category)}
+            name={catIcon}
             size={14}
             color={isCompleted ? colors.text.faint : colors.text.muted}
           />

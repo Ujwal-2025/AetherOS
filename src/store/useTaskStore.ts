@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Task, TaskPriority, TaskCategory, RecurrenceType } from '../types';
 import { calcTaskXP, XP_BY_PRIORITY } from '../utils/xp';
 import { getTodayString } from '../utils/date';
@@ -82,11 +83,12 @@ type AddTaskInput = Omit<Task, 'id' | 'status' | 'createdAt'>;
 interface TaskState {
   tasks: Task[];
 
-  addTask:      (data: AddTaskInput) => void;
-  completeTask: (id: string, streak: number) => number;
-  failTask:     (id: string) => void;
-  deleteTask:   (id: string) => void;
-  updateTask:   (id: string, data: Partial<Task>) => void;
+  addTask:          (data: AddTaskInput) => void;
+  completeTask:     (id: string, streak: number) => number;
+  failTask:         (id: string) => void;
+  deleteTask:       (id: string) => void;
+  updateTask:       (id: string, data: Partial<Task>) => void;
+  deleteTasksByTag: (tag: string) => void;
 
   todaysTasks:         () => Task[];
   completedToday:      () => Task[];
@@ -128,6 +130,11 @@ export const useTaskStore = create<TaskState>()(
       updateTask: (id, data) =>
         set((state) => ({
           tasks: state.tasks.map((t) => (t.id === id ? { ...t, ...data } : t)),
+        })),
+
+      deleteTasksByTag: (tag) =>
+        set((state) => ({
+          tasks: state.tasks.filter((t) => !t.tags?.includes(tag)),
         })),
 
       // ── Derived ──────────────────────────────────────────────────────────────
@@ -180,6 +187,7 @@ export const useTaskStore = create<TaskState>()(
     }),
     {
       name:       'aetheros-tasks',
+      storage:    createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({ tasks: state.tasks }),
     }
   )

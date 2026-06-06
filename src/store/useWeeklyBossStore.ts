@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface WeeklyBoss {
   weekStart:          string;
@@ -49,8 +50,8 @@ function checkComplete(boss: WeeklyBoss): boolean {
 
 interface WeeklyBossState {
   boss:              WeeklyBoss;
-  logFocusMinutes:   (minutes: number) => void;
-  logTaskCompletion: () => void;
+  logFocusMinutes:   (minutes: number) => number; // returns bonusXP if just defeated, else 0
+  logTaskCompletion: () => number;                // returns bonusXP if just defeated, else 0
   refreshIfNewWeek:  () => void;
 }
 
@@ -60,19 +61,21 @@ export const useWeeklyBossStore = create<WeeklyBossState>()(
       boss: getCurrentBoss(),
 
       logFocusMinutes: (minutes) => {
-        set((state) => {
-          if (state.boss.isComplete) return {};
-          const updated = { ...state.boss, focusMinutesLogged: state.boss.focusMinutesLogged + minutes };
-          return { boss: { ...updated, isComplete: checkComplete(updated) } };
-        });
+        const { boss } = get();
+        if (boss.isComplete) return 0;
+        const updated  = { ...boss, focusMinutesLogged: boss.focusMinutesLogged + minutes };
+        const justDone = checkComplete(updated);
+        set({ boss: { ...updated, isComplete: justDone } });
+        return justDone ? updated.bonusXP : 0;
       },
 
       logTaskCompletion: () => {
-        set((state) => {
-          if (state.boss.isComplete) return {};
-          const updated = { ...state.boss, tasksCompleted: state.boss.tasksCompleted + 1 };
-          return { boss: { ...updated, isComplete: checkComplete(updated) } };
-        });
+        const { boss } = get();
+        if (boss.isComplete) return 0;
+        const updated  = { ...boss, tasksCompleted: boss.tasksCompleted + 1 };
+        const justDone = checkComplete(updated);
+        set({ boss: { ...updated, isComplete: justDone } });
+        return justDone ? updated.bonusXP : 0;
       },
 
       refreshIfNewWeek: () => {
@@ -83,6 +86,7 @@ export const useWeeklyBossStore = create<WeeklyBossState>()(
     }),
     {
       name:       'aetheros-weekly-boss',
+      storage:    createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({ boss: state.boss }),
     }
   )

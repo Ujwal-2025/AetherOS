@@ -54,9 +54,10 @@ export function TasksScreen() {
 
   function handleComplete(taskId: string) {
     haptics.success();
-    const task   = tasks.find((t) => t.id === taskId);
-    const baseXp = completeTask(taskId, profile.currentStreak);
-    const earned = Math.round(baseXp * comboMultiplier);
+    const task      = tasks.find((t) => t.id === taskId);
+    const baseXp    = completeTask(taskId, profile.currentStreak);
+    const bossBonus = bossTick();
+    const earned    = Math.round(baseXp * comboMultiplier) + bossBonus;
     addXP(earned);
     incrementTasksCompleted();
     incrementCombo();
@@ -65,7 +66,6 @@ export function TasksScreen() {
     const newTotalTasks  = profile.tasksCompleted + 1;
     const todayCompleted = completedToday().length + 1;
     if (task) recordCategoryActivity(task.category);
-    bossTick();
     recordActivity({ xpEarned: earned, tasksCompleted: 1, streakDay: profile.currentStreak });
     checkAchievements({ totalTasks: newTotalTasks, currentStreak: profile.currentStreak, longestStreak: profile.longestStreak, rank, focusMinutes: profile.focusMinutesTotal, todayTasks: todayCompleted, completionHour: new Date().getHours(), deepWorkSessions });
   }

@@ -101,14 +101,14 @@ export function DashboardScreen() {
   // Checkmark button → complete the task in-place
   function handleCompleteTask(taskId: string) {
     haptics.success();
-    const task    = activeTasks.find((t) => t.id === taskId);
-    const baseXp  = completeTask(taskId, profile.currentStreak);
-    const earned  = Math.round(baseXp * comboMultiplier);
+    const task       = activeTasks.find((t) => t.id === taskId);
+    const baseXp     = completeTask(taskId, profile.currentStreak);
+    const bossBonus  = bossTick();
+    const earned     = Math.round(baseXp * comboMultiplier) + bossBonus;
     addXP(earned);
     incrementTasksCompleted();
     incrementCombo();
     if (task) recordCategoryActivity(task.category);
-    bossTick();
     recordActivity({ xpEarned: earned, tasksCompleted: 1, streakDay: profile.currentStreak });
     checkAchievements({
       totalTasks:       profile.tasksCompleted + 1,

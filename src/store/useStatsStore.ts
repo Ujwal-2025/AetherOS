@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DayStats } from '../types';
 
 function getTodayString() { return new Date().toISOString().split('T')[0]; }
@@ -75,7 +76,8 @@ export const useStatsStore = create<StatsState>()(
   getLast28Days: () => last28Days().map((date) => get().days.find((d) => d.date === date) ?? EMPTY_DAY(date)),
   }),
   {
-    name: 'aetheros-stats',
+    name:    'aetheros-stats',
+    storage: createJSONStorage(() => AsyncStorage),
     partialize: (state) => ({
       days:               state.days,
       deepWorkSessions:   state.deepWorkSessions,

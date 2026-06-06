@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Rank } from '../types';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -118,6 +119,7 @@ export const useAchievementStore = create<AchievementState>()(
   }),
   {
     name:       'aetheros-achievements',
+    storage:    createJSONStorage(() => AsyncStorage),
     partialize: (state) => ({ achievements: state.achievements }),
   }
 ));

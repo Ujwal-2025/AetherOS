@@ -69,16 +69,17 @@ export function FocusScreen() {
 
   function handleComplete() {
     clearInterval(intervalRef.current!);
-    const earned = activeMode.xp;
-    setXpEarned(earned);
-    addXP(earned);
+    const earned        = activeMode.xp;
+    const challengeBonus = logChallengeMinutes(activeMode.minutes);
+    const bossBonus      = logBossMinutes(activeMode.minutes);
+    const total          = earned + challengeBonus + bossBonus;
+    setXpEarned(total);
+    addXP(total);
     addFocusMinutes(activeMode.minutes);
-    logChallengeMinutes(activeMode.minutes);
-    logBossMinutes(activeMode.minutes);
     incrementCombo();
     clearPendingTask();
     haptics.focusComplete();
-    setFlyOutXP(earned);
+    setFlyOutXP(total);
 
     const isDeepWork = activeMode.key === 'deep';
     recordActivity({ xpEarned: earned, focusMinutes: activeMode.minutes, streakDay: profile.currentStreak, isDeepWork });
@@ -92,12 +93,16 @@ export function FocusScreen() {
     const elapsed        = activeMode.minutes * 60 - secondsLeft;
     const elapsedMinutes = Math.floor(elapsed / 60);
     const earnedPartial  = Math.round((elapsed / (activeMode.minutes * 60)) * activeMode.xp);
-    setXpEarned(earnedPartial);
-    if (earnedPartial > 0) { addXP(earnedPartial); setFlyOutXP(earnedPartial); }
+    let total = earnedPartial;
+    if (elapsedMinutes > 0) {
+      total += logChallengeMinutes(elapsedMinutes);
+      total += logBossMinutes(elapsedMinutes);
+    }
+    setXpEarned(total);
     addFocusMinutes(elapsedMinutes);
-    if (elapsedMinutes > 0) { logChallengeMinutes(elapsedMinutes); logBossMinutes(elapsedMinutes); }
+    if (total > 0) { addXP(total); setFlyOutXP(total); }
     clearPendingTask();
-    if (earnedPartial > 0) haptics.success();
+    if (total > 0) haptics.success();
     setStage('complete');
   }
 

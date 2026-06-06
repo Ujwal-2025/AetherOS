@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface CategoryConfig {
   id:        string;
@@ -58,6 +59,7 @@ export const useCategoryStore = create<CategoryState>()(
     }),
     {
       name:       'aetheros-categories',
+      storage:    createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({ categories: state.categories }),
     }
   )
