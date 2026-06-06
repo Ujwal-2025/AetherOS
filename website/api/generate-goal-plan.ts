@@ -91,8 +91,7 @@ Build my structured quest plan. Use web search to find the best approach for thi
 
     if (!groqRes.ok) {
       const errText = await groqRes.text()
-      console.error('Groq error:', groqRes.status, errText)
-      return new Response(JSON.stringify({ error: 'upstream error' }), { status: 502 })
+      return new Response(JSON.stringify({ error: 'upstream error', status: groqRes.status, detail: errText }), { status: 502 })
     }
 
     const groqData = await groqRes.json()
