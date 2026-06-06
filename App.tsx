@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Platform, StyleSheet, LogBox } from 'react-native';
 
 LogBox.ignoreLogs([
@@ -7,6 +7,7 @@ LogBox.ignoreLogs([
 ]);
 
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   useFonts,
@@ -18,6 +19,8 @@ import {
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation/RootNavigator';
 
+SplashScreen.preventAutoHideAsync();
+
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
@@ -25,6 +28,12 @@ export default function App() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, fontError]);
 
   if (!fontsLoaded && !fontError && Platform.OS !== 'web') {
     return null;
