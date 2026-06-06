@@ -1,46 +1,8 @@
 export const config = { runtime: 'edge' }
 
-const SYSTEM_PROMPT = `You are AetherOS, a Solo Leveling-inspired productivity system.
-The user will give you a goal and a target date. You must build a structured quest plan.
-
-Return ONLY valid JSON — no markdown, no explanation, no code fences.
-
-Schema:
-{
-  "goalId": string (slug like "learn-guitar-sep-2026"),
-  "goalTitle": string (short, 3-5 words, e.g. "Learn Guitar by September"),
-  "dailyHabit": {
-    "title": string (max 8 words, action-oriented),
-    "category": "health" | "work" | "learning" | "personal",
-    "priority": "low" | "medium" | "high" | "critical",
-    "estimatedMinutes": number (10-60)
-  },
-  "milestones": [
-    {
-      "title": string (max 8 words),
-      "category": "health" | "work" | "learning" | "personal",
-      "priority": "high" | "critical",
-      "estimatedMinutes": number,
-      "weekOffset": number (weeks from now when this milestone is due, e.g. 4, 8, 12)
-    }
-  ],
-  "thisWeek": [
-    {
-      "title": string (max 8 words, specific and immediately actionable),
-      "category": "health" | "work" | "learning" | "personal",
-      "priority": "low" | "medium" | "high" | "critical",
-      "estimatedMinutes": number
-    }
-  ]
-}
-
-Rules:
-- dailyHabit: exactly 1, the core recurring practice (e.g. "Practice guitar 30 minutes")
-- milestones: 3-5 items spaced evenly between now and the target date, each a major checkpoint
-- thisWeek: 4-6 items that are the most important things to do THIS WEEK to start the goal
-- Use web search to find real, expert-recommended approaches for the specific goal
-- Titles: short, action-oriented, specific (not generic like "work on goal")
-- estimatedMinutes: realistic time to complete the task`
+const SYSTEM_PROMPT = `You are AetherOS, a productivity quest planner. Given a goal and target date, return ONLY a JSON object (no markdown, no explanation) with this exact shape:
+{"goalId":"slug-here","goalTitle":"Short Title","dailyHabit":{"title":"Action verb task","category":"learning","priority":"high","estimatedMinutes":30},"milestones":[{"title":"Milestone task","category":"learning","priority":"high","estimatedMinutes":60,"weekOffset":4}],"thisWeek":[{"title":"First step task","category":"learning","priority":"medium","estimatedMinutes":20}]}
+Rules: dailyHabit=1 recurring practice, milestones=3-5 checkpoints with weekOffset spaced to target date, thisWeek=4-5 immediate actions. category must be one of: health,work,learning,personal. priority: low/medium/high/critical.`
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
@@ -63,11 +25,7 @@ export default async function handler(req: Request) {
     return new Response(JSON.stringify({ error: 'server misconfigured' }), { status: 500 })
   }
 
-  const userMessage = `Goal: "${goal}"
-Target date: ${targetDate || 'as soon as possible'}
-Available categories: ${categories.join(', ')}
-
-Build my structured quest plan. Use web search to find the best approach for this specific goal. Return only JSON.`
+  const userMessage = `Goal: "${goal}". Target: ${targetDate || 'as soon as possible'}. Return JSON only.`
 
   const payload = {
     model: 'compound-beta',
