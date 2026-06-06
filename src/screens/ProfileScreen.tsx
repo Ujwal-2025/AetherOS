@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, ScrollView, StyleSheet, Platform } from 'react-native';
+import { View, ScrollView, StyleSheet, Platform, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,8 +9,11 @@ import { CircularProgress } from '../components/shared/CircularProgress';
 import { useUserStore } from '../store/useUserStore';
 import { useStatsStore } from '../store/useStatsStore';
 import { useAchievementStore } from '../store/useAchievementStore';
+import { useGoalStore } from '../store/useGoalStore';
+import { useTaskStore } from '../store/useTaskStore';
 import { getRankThreshold, RANK_THRESHOLDS, formatXP } from '../utils/xp';
 import { Rank, DayStats } from '../types';
+import { Alert } from 'react-native';
 
 const RANK_ORDER: Rank[] = ['E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'];
 const CAT_COLORS: Record<string, string> = { streak: '#fbbf24', focus: colors.primary.default, rank: colors.secondary.default, tasks: colors.success.default, special: '#f97316' };
@@ -19,6 +22,8 @@ export function ProfileScreen() {
   const { profile, rank, rankProgress, xpToNextRank } = useUserStore();
   const { getLast28Days, deepWorkSessions } = useStatsStore();
   const { getUnlocked, achievements } = useAchievementStore();
+  const { goals, removeGoal } = useGoalStore();
+  const { deleteTasksByTag }  = useTaskStore();
 
   const days28    = getLast28Days();
   const unlocked  = getUnlocked();
@@ -75,6 +80,41 @@ export function ProfileScreen() {
           <SectionHeader title="Rank Progression" subtitle="Your journey" icon="trending-up-outline" color={colors.primary.default} />
           <RankTimeline currentRank={rank} totalXP={profile.totalXP} />
         </View>
+
+        {/* Active Goals */}
+        {goals.length > 0 && (
+          <View style={styles.section}>
+            <SectionHeader title="Active Goals" subtitle={`${goals.length} running`} icon="planet-outline" color={colors.primary.default} />
+            <View style={goalStyles.list}>
+              {goals.map((goal) => (
+                <View key={goal.id} style={goalStyles.row}>
+                  <View style={goalStyles.rowLeft}>
+                    <Ionicons name="flag-outline" size={14} color={colors.primary.default} />
+                    <View style={{ flex: 1 }}>
+                      <AText variant="body" weight="semiBold" style={{ color: colors.white }} numberOfLines={1}>{goal.title}</AText>
+                      <AText variant="caption" color="muted" style={{ marginTop: 2 }}>By {goal.targetDate} · {goal.taskCount} quests</AText>
+                    </View>
+                  </View>
+                  <Pressable
+                    style={goalStyles.deleteBtn}
+                    onPress={() => {
+                      Alert.alert(
+                        'Delete Goal',
+                        `Remove "${goal.title}" and all its quests?`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Delete', style: 'destructive', onPress: () => { deleteTasksByTag(goal.tagKey); removeGoal(goal.id); } },
+                        ]
+                      );
+                    }}
+                  >
+                    <Ionicons name="trash-outline" size={16} color={colors.danger.default} />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Recent Achievements */}
         {unlocked.length > 0 && (
@@ -219,6 +259,13 @@ function SectionHeader({ title, subtitle, icon, color }: { title: string; subtit
 }
 const sectionStyles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginBottom: spacing[3] },
+});
+
+const goalStyles = StyleSheet.create({
+  list:      { gap: spacing[2] },
+  row:       { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg.surface, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.primary.default + '20', padding: spacing[4], gap: spacing[3] },
+  rowLeft:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  deleteBtn: { width: 34, height: 34, borderRadius: radius.full, backgroundColor: colors.danger.faint, borderWidth: 1, borderColor: colors.danger.default + '30', alignItems: 'center', justifyContent: 'center' },
 });
 
 const styles = StyleSheet.create({

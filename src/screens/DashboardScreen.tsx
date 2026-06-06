@@ -18,6 +18,10 @@ import { MetricDetailSheet } from '../components/shared/MetricDetailSheet';
 import { DayCompleteOverlay } from '../components/shared/DayCompleteOverlay';
 import { WeeklyBossCard } from '../components/shared/WeeklyBossCard';
 import { CreateTaskModal } from '../components/shared/CreateTaskModal';
+import { GoalInputSheet } from '../components/shared/GoalInputSheet';
+import { GoalPlanPreviewSheet } from '../components/shared/GoalPlanPreviewSheet';
+import { useGoalStore } from '../store/useGoalStore';
+import { GoalPlan } from '../components/shared/GoalInputSheet';
 import { useCategoryStore } from '../store/useCategoryStore';
 import { useUserStore } from '../store/useUserStore';
 import { useTaskStore } from '../store/useTaskStore';
@@ -43,10 +47,14 @@ export function DashboardScreen() {
   const { logTaskCompletion: bossTick } = useWeeklyBossStore();
 
   const { categories } = useCategoryStore();
+  const { goals } = useGoalStore();
   const [showCompletionDetail, setShowCompletionDetail] = useState(false);
   const [selectedMetric,       setSelectedMetric]       = useState<{ id: string; name: string; color: string; icon: string } | null>(null);
   const [showCreateTask,       setShowCreateTask]       = useState(false);
   const [showDayComplete,      setShowDayComplete]      = useState(false);
+  const [showGoalInput,        setShowGoalInput]        = useState(false);
+  const [pendingPlan,          setPendingPlan]          = useState<GoalPlan | null>(null);
+  const [pendingTargetDate,    setPendingTargetDate]    = useState('');
   const hasCelebrated = useRef(false);
 
   const rankInfo       = getRankThreshold(rank);
@@ -245,6 +253,27 @@ export function DashboardScreen() {
           <DailyChallengeCard />
         </Animated.View>
 
+        {/* AI Goal Planner card */}
+        <Animated.View entering={FadeInDown.delay(220).duration(500).springify()}>
+          <Pressable style={styles.goalCard} onPress={() => { haptics.light(); setShowGoalInput(true); }}>
+            <LinearGradient colors={['rgba(183,109,255,0.10)', 'transparent']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} pointerEvents="none" />
+            <View style={styles.goalCardLeft}>
+              <View style={styles.goalCardIcon}>
+                <Ionicons name="planet-outline" size={20} color={colors.primary.default} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <AText variant="body" weight="bold" style={{ color: colors.white }}>AI Goal Planner</AText>
+                <AText variant="caption" color="muted" style={{ marginTop: 2 }}>
+                  {goals.length > 0 ? `${goals.length} active goal${goals.length > 1 ? 's' : ''}` : 'Tell AetherOS your goal →'}
+                </AText>
+              </View>
+            </View>
+            <View style={styles.goalCardRight}>
+              <Ionicons name="add-circle-outline" size={22} color={colors.primary.default} />
+            </View>
+          </Pressable>
+        </Animated.View>
+
         {/* Weekly Boss */}
         <Animated.View entering={FadeInDown.delay(240).duration(500).springify()}>
           <WeeklyBossCard />
@@ -320,6 +349,22 @@ export function DashboardScreen() {
         />
       )}
       <CreateTaskModal visible={showCreateTask} onClose={() => setShowCreateTask(false)} />
+      <GoalInputSheet
+        visible={showGoalInput}
+        onClose={() => setShowGoalInput(false)}
+        onPlanReady={(plan, targetDate) => {
+          setPendingPlan(plan);
+          setPendingTargetDate(targetDate);
+          setShowGoalInput(false);
+        }}
+      />
+      <GoalPlanPreviewSheet
+        visible={!!pendingPlan}
+        plan={pendingPlan}
+        targetDate={pendingTargetDate}
+        onClose={() => setPendingPlan(null)}
+        onConfirm={() => setPendingPlan(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -424,6 +469,10 @@ const styles = StyleSheet.create({
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[3] },
   metricCard: { flex: 1, minWidth: '45%', backgroundColor: '#0a0a0a', borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border.subtle, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing[5], paddingHorizontal: spacing[3], gap: spacing[3], overflow: 'hidden' },
   metricGlow: { position: 'absolute', width: 80, height: 80, borderRadius: radius.full, top: '50%', left: '50%', marginTop: -40, marginLeft: -40, opacity: 0.6 },
+  goalCard:       { borderRadius: 20, borderWidth: 1, borderColor: colors.primary.default + '30', backgroundColor: colors.bg.surface, padding: spacing[4], flexDirection: 'row', alignItems: 'center', overflow: 'hidden' },
+  goalCardLeft:   { flexDirection: 'row', alignItems: 'center', gap: spacing[3], flex: 1 },
+  goalCardIcon:   { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.primary.faint, borderWidth: 1, borderColor: colors.primary.default + '30', alignItems: 'center', justifyContent: 'center' },
+  goalCardRight:  { paddingLeft: spacing[3] },
   shieldBadge:    { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
   shieldText:     { fontFamily: fontFamily.bold, fontSize: 9, letterSpacing: 1, color: colors.secondary.default },
   catStreakBadge: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 99, borderWidth: 1 },
