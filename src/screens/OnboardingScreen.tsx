@@ -1,12 +1,11 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Pressable, Dimensions } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, StyleSheet, Pressable, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontFamily } from '../theme';
 import { AText } from '../components/ui/AText';
-
-const { width } = Dimensions.get('window');
+import { useUserStore } from '../store/useUserStore';
 
 interface Slide {
   icon:       keyof typeof Ionicons.glyphMap;
@@ -47,38 +46,105 @@ const SLIDES: Slide[] = [
   },
 ];
 
+// Final name-entry step — not a slide, rendered separately
+const NAME_STEP_GRADIENT: [string, string] = ['rgba(183,109,255,0.18)', 'transparent'];
+
 interface OnboardingScreenProps {
   onComplete: () => void;
 }
 
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
-  const [index, setIndex] = useState(0);
-  const slide = SLIDES[index];
+  const [index, setIndex]   = useState(0);
+  const [onNameStep, setOnNameStep] = useState(false);
+  const [name, setName]     = useState('');
+  const inputRef            = useRef<TextInput>(null);
+  const setDisplayName      = useUserStore((s) => s.setDisplayName);
+
+  const slide  = SLIDES[index];
   const isLast = index === SLIDES.length - 1;
 
   function goNext() {
-    if (isLast) { onComplete(); return; }
+    if (isLast) { setOnNameStep(true); return; }
     setIndex((i) => i + 1);
   }
 
   function goBack() {
+    if (onNameStep) { setOnNameStep(false); return; }
     if (index > 0) setIndex((i) => i - 1);
   }
 
+  function handleBegin() {
+    setDisplayName(name.trim() || 'Hunter');
+    onComplete();
+  }
+
+  // ── Name entry step ──────────────────────────────────────────────────────────
+  if (onNameStep) {
+    return (
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+          <LinearGradient colors={NAME_STEP_GRADIENT} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.6 }} pointerEvents="none" />
+
+          <View style={styles.orbSection}>
+            <View style={[styles.orbOuter, { borderColor: colors.primary.default + '20' }]}>
+              <View style={[styles.orbInner, { borderColor: colors.primary.default + '40' }]}>
+                <View style={[styles.orbCore, { backgroundColor: colors.primary.default + '15', borderColor: colors.primary.default + '30' }]}>
+                  <Ionicons name="person-outline" size={52} color={colors.primary.default} />
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.textSection}>
+            <AText variant="title" weight="bold" style={[styles.title, { color: colors.white }]}>
+              What's your hunter name?
+            </AText>
+            <AText variant="body" color="muted" style={styles.subtitle}>
+              This is how AetherOS will address you. You can change it later.
+            </AText>
+
+            <TextInput
+              ref={inputRef}
+              style={styles.nameInput}
+              value={name}
+              onChangeText={setName}
+              placeholder="Enter your name…"
+              placeholderTextColor={colors.text.faint}
+              autoFocus
+              autoCapitalize="words"
+              returnKeyType="done"
+              onSubmitEditing={handleBegin}
+              maxLength={24}
+            />
+          </View>
+
+          <View style={styles.btnRow}>
+            <Pressable style={styles.backBtn} onPress={goBack}>
+              <Ionicons name="arrow-back" size={18} color={colors.text.muted} />
+            </Pressable>
+            <Pressable
+              style={[styles.nextBtn, { backgroundColor: colors.primary.default + '18', borderColor: colors.primary.default + '50' }]}
+              onPress={handleBegin}
+            >
+              <AText style={[styles.nextTxt, { color: colors.primary.default }]}>
+                {name.trim() ? `Begin as ${name.trim()}` : 'Begin as Hunter'}
+              </AText>
+              <Ionicons name="flash" size={16} color={colors.primary.default} />
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ── Normal slides ─────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Ambient */}
-      <LinearGradient
-        colors={slide.gradient}
-        style={StyleSheet.absoluteFill}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 0.6 }}
-        pointerEvents="none"
-      />
+      <LinearGradient colors={slide.gradient} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.6 }} pointerEvents="none" />
 
       {/* Skip */}
       {!isLast && (
-        <Pressable style={styles.skipBtn} onPress={onComplete}>
+        <Pressable style={styles.skipBtn} onPress={() => setOnNameStep(true)}>
           <AText variant="caption" color="muted">Skip</AText>
         </Pressable>
       )}
@@ -104,9 +170,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         </AText>
       </View>
 
-      {/* Dots */}
+      {/* Dots — 5 total (4 slides + name step) */}
       <View style={styles.dots}>
-        {SLIDES.map((_, i) => (
+        {[...SLIDES, null].map((_, i) => (
           <View
             key={i}
             style={[
@@ -134,9 +200,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           onPress={goNext}
         >
           <AText style={[styles.nextTxt, { color: slide.iconColor }]}>
-            {isLast ? 'Begin' : 'Continue'}
+            {isLast ? 'Set my name' : 'Continue'}
           </AText>
-          <Ionicons name={isLast ? 'flash' : 'arrow-forward'} size={16} color={slide.iconColor} />
+          <Ionicons name="arrow-forward" size={16} color={slide.iconColor} />
         </Pressable>
       </View>
     </SafeAreaView>
@@ -152,9 +218,23 @@ const styles = StyleSheet.create({
   orbInner:   { width: 210, height: 210, borderRadius: 105, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   orbCore:    { width: 160, height: 160, borderRadius: 80, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 
-  textSection: { alignItems: 'center', gap: spacing[4], paddingBottom: spacing[6] },
+  textSection: { alignItems: 'center', gap: spacing[4], paddingBottom: spacing[6], width: '100%' },
   title:       { textAlign: 'center', lineHeight: 40 },
   subtitle:    { textAlign: 'center', maxWidth: 320, lineHeight: 22 },
+
+  nameInput: {
+    width: '100%',
+    backgroundColor: colors.bg.elevated,
+    borderWidth: 1,
+    borderColor: colors.primary.default + '40',
+    borderRadius: radius.md,
+    padding: spacing[4],
+    color: colors.text.primary,
+    fontFamily: fontFamily.regular,
+    fontSize: 18,
+    textAlign: 'center',
+    marginTop: spacing[2],
+  },
 
   dots: { flexDirection: 'row', gap: spacing[2], marginBottom: spacing[6] },
   dot:  { height: 4, borderRadius: 2, width: 8, backgroundColor: colors.border.strong },
