@@ -28,14 +28,8 @@ import { useWeeklyBossStore } from '../store/useWeeklyBossStore';
 import { useRef } from 'react';
 import { getRankThreshold, getNextRankThreshold } from '../utils/xp';
 import { haptics } from '../utils/haptics';
-import { MainTabParamList, FocusMode, Task } from '../types';
-
-// Derive focus mode from a task's estimated duration
-function modeFromDuration(minutes?: number): FocusMode {
-  if (!minutes || minutes <= 25) return 'sprint';
-  if (minutes <= 60)             return 'flow';
-  return 'deep';
-}
+import { modeFromDuration } from '../utils/focus';
+import { MainTabParamList, Task } from '../types';
 
 
 export function DashboardScreen() {

@@ -18,13 +18,8 @@ import { useStatsStore } from '../store/useStatsStore';
 import { useWeeklyBossStore } from '../store/useWeeklyBossStore';
 import { useFocusStore } from '../store/useFocusStore';
 import { haptics } from '../utils/haptics';
-import { Task, MainTabParamList, FocusMode } from '../types';
-
-function modeFromDuration(minutes?: number): FocusMode {
-  if (!minutes || minutes <= 25) return 'sprint';
-  if (minutes <= 60)             return 'flow';
-  return 'deep';
-}
+import { modeFromDuration } from '../utils/focus';
+import { Task, MainTabParamList } from '../types';
 
 type FilterKey = 'all' | 'today' | 'completed';
 
