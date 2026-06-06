@@ -59,7 +59,8 @@ export default async function handler(req: Request) {
     })
 
     if (!groqRes.ok) {
-      return new Response(JSON.stringify({ error: 'upstream error' }), { status: 502, headers: CORS })
+      const detail = await groqRes.text()
+      return new Response(JSON.stringify({ error: 'upstream error', status: groqRes.status, detail }), { status: 502, headers: CORS })
     }
 
     const groqData = await groqRes.json()
