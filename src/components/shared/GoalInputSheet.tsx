@@ -38,7 +38,7 @@ interface GoalInputSheetProps {
   onPlanReady: (plan: GoalPlan, targetDate: string) => void;
 }
 
-const VERCEL_URL = 'https://aetheros.vercel.app'; // ← update with your Vercel URL
+const VERCEL_URL = 'https://aether-os-azure.vercel.app';
 
 export function GoalInputSheet({ visible, onClose, onPlanReady }: GoalInputSheetProps) {
   const [goal,       setGoal]       = useState('');
