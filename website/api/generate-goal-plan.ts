@@ -39,13 +39,14 @@ export default async function handler(req: Request) {
   const userMessage = `Goal: "${goal}". Target: ${targetDate || 'as soon as possible'}. Return JSON only.`
 
   const payload = {
-    model: 'compound-beta',
+    model: 'llama-3.3-70b-versatile',
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user',   content: userMessage },
     ],
     temperature: 0.6,
     max_tokens:  1500,
+    response_format: { type: 'json_object' },
   }
 
   try {

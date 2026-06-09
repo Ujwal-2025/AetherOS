@@ -38,7 +38,45 @@ interface GoalInputSheetProps {
   onPlanReady: (plan: GoalPlan, targetDate: string) => void;
 }
 
-const VERCEL_URL = 'https://aether-os-azure.vercel.app';
+const GROQ_SYSTEM_PROMPT = `You are AetherOS, a productivity quest planner. Given a goal and target date, return ONLY a JSON object (no markdown, no explanation) with this exact shape:
+{"goalId":"slug-here","goalTitle":"Short Title","dailyHabit":{"title":"Action verb task","category":"learning","priority":"high","estimatedMinutes":30},"milestones":[{"title":"Milestone task","category":"learning","priority":"high","estimatedMinutes":60,"weekOffset":4}],"thisWeek":[{"title":"First step task","category":"learning","priority":"medium","estimatedMinutes":20}]}
+Rules: dailyHabit=1 recurring practice, milestones=3-5 checkpoints with weekOffset spaced to target date, thisWeek=4-5 immediate actions. category must be one of: health,work,learning,personal. priority: low/medium/high/critical.`;
+
+async function fetchGoalPlan(goal: string, targetDate: string, categories: string[]): Promise<GoalPlan> {
+  const apiKey = (process.env as Record<string, string>).EXPO_PUBLIC_GROQ_API_KEY ?? '';
+
+  if (!apiKey) {
+    throw new Error('Add your free Groq API key to .env as EXPO_PUBLIC_GROQ_API_KEY (get it at console.groq.com)');
+  }
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model:           'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: GROQ_SYSTEM_PROMPT },
+        { role: 'user',   content: `Goal: "${goal}". Target: ${targetDate || 'as soon as possible'}. Categories available: ${categories.join(', ')}. Return JSON only.` },
+      ],
+      temperature:     0.6,
+      max_tokens:      1500,
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    throw new Error(`Groq error ${res.status}: ${errBody.slice(0, 120)}`);
+  }
+
+  const data  = await res.json();
+  const text  = data?.choices?.[0]?.message?.content ?? '';
+  const plan  = JSON.parse(text) as GoalPlan;
+  if (!plan.goalId || !plan.dailyHabit || !Array.isArray(plan.milestones) || !Array.isArray(plan.thisWeek)) {
+    throw new Error('AI returned an incomplete plan. Try again.');
+  }
+  return plan;
+}
 
 export function GoalInputSheet({ visible, onClose, onPlanReady }: GoalInputSheetProps) {
   const [goal,       setGoal]       = useState('');
@@ -52,23 +90,12 @@ export function GoalInputSheet({ visible, onClose, onPlanReady }: GoalInputSheet
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${VERCEL_URL}/api/generate-goal-plan`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          goal:       goal.trim(),
-          targetDate: target.trim() || 'as soon as possible',
-          categories: categories.map((c) => c.id),
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const plan: GoalPlan = await res.json();
-      if (!plan.goalId || !plan.dailyHabit) throw new Error('bad response');
+      const plan = await fetchGoalPlan(goal.trim(), target.trim() || 'as soon as possible', categories.map((c) => c.id));
       onPlanReady(plan, target.trim() || 'ongoing');
       setGoal('');
       setTarget('');
-    } catch (e) {
-      setError('Could not reach AetherOS servers. Check your connection and try again.');
+    } catch (e: any) {
+      setError(e?.message ?? 'Something went wrong. Try again.');
     } finally {
       setLoading(false);
     }

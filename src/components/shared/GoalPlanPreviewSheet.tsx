@@ -95,6 +95,18 @@ export function GoalPlanPreviewSheet({ visible, plan, targetDate, onClose, onCon
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [flyXP, setFlyXP]       = useState<number | null>(null);
 
+  // Pre-select all on first open — must stay BEFORE any early return
+  React.useEffect(() => {
+    if (!visible || !plan) return;
+    const init: Record<string, boolean> = {};
+    [
+      plan.dailyHabit,
+      ...plan.milestones,
+      ...plan.thisWeek,
+    ].forEach((task, i) => { init[`${task.title}-${i}`] = true; });
+    setSelected(init);
+  }, [visible, plan?.goalId]);
+
   if (!plan) return null;
 
   const allTasks = [
@@ -104,15 +116,6 @@ export function GoalPlanPreviewSheet({ visible, plan, targetDate, onClose, onCon
   ];
 
   function makeId(task: GoalTaskRaw, i: number) { return `${task.title}-${i}`; }
-
-  // Pre-select all on first open
-  React.useEffect(() => {
-    if (visible && plan) {
-      const init: Record<string, boolean> = {};
-      allTasks.forEach(({ task }, i) => { init[makeId(task, i)] = true; });
-      setSelected(init);
-    }
-  }, [visible, plan?.goalId]);
 
   function toggle(id: string) {
     setSelected((s) => ({ ...s, [id]: !s[id] }));

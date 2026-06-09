@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Pressable, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontFamily } from '../theme';
@@ -7,7 +8,7 @@ import { AText } from '../components/ui/AText';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { TasksScreen } from '../screens/TasksScreen';
 import { FocusScreen } from '../screens/FocusScreen';
-import { RewardsScreen } from '../screens/RewardsScreen';
+import { SystemScreen } from '../screens/SystemScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { MainTabParamList } from '../types';
 import { useAchievementStore } from '../store/useAchievementStore';
@@ -55,6 +56,7 @@ function TabLabel({ label, focused }: { label: string; focused: boolean }) {
 // ─── Navigator ────────────────────────────────────────────────────────────────
 
 export function MainNavigator() {
+  const insets = useSafeAreaInsets();
   const { pendingUnlockQueue, dequeueUnlock } = useAchievementStore();
   const { resetDailyTasks } = useTaskStore();
   const { profile, addXP, checkAndUpdateStreak } = useUserStore();
@@ -75,7 +77,7 @@ export function MainNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [styles.tabBar, { height: 64 + insets.bottom, paddingBottom: insets.bottom }],
         tabBarActiveTintColor:   colors.primary.default,
         tabBarInactiveTintColor: colors.text.faint,
         tabBarShowLabel: false,
@@ -113,13 +115,13 @@ export function MainNavigator() {
         }}
       />
       <Tab.Screen
-        name="Rewards"
-        component={RewardsScreen}
+        name="System"
+        component={SystemScreen}
         options={{
           tabBarIcon: ({ focused }) => (
             <View style={styles.tabItem}>
-              <Ionicons name={focused ? 'ribbon' : 'ribbon-outline'} size={22} color={focused ? colors.primary.default : colors.text.faint} />
-              <TabLabel label="Rewards" focused={focused} />
+              <Ionicons name={focused ? 'layers' : 'layers-outline'} size={22} color={focused ? colors.primary.default : colors.text.faint} />
+              <TabLabel label="System" focused={focused} />
             </View>
           ),
         }}
@@ -148,12 +150,10 @@ export function MainNavigator() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor:   colors.bg.surface,
-    borderTopWidth:    1,
-    borderTopColor:    colors.border.subtle,
-    height:            72,
-    paddingBottom:     8,
-    paddingTop:        8,
+    backgroundColor: colors.bg.surface,
+    borderTopWidth:  1,
+    borderTopColor:  colors.border.subtle,
+    paddingTop:      8,
   },
   tabItem: {
     alignItems:     'center',

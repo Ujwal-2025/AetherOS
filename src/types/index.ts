@@ -110,8 +110,8 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Dashboard: undefined;
-  Tasks:     undefined;
+  Tasks:     { initialFilter?: 'today' | 'all' | 'completed' } | undefined;
   Focus:     undefined;
-  Rewards:   undefined;
+  System:    undefined;
   Profile:   undefined;
 };

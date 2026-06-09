@@ -1,27 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, Pressable, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, ScrollView, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming, FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  useSharedValue, useAnimatedStyle,
+  withRepeat, withSequence, withTiming, FadeInDown,
+} from 'react-native-reanimated';
 import { colors, spacing, radius, fontFamily } from '../theme';
 import { AText } from '../components/ui/AText';
 import { CircularProgress } from '../components/shared/CircularProgress';
-import { XPBar } from '../components/shared/XPBar';
 import { QuestCard } from '../components/shared/QuestCard';
 import { RankUpOverlay } from '../components/shared/RankUpOverlay';
-import { DailyChallengeCard } from '../components/shared/DailyChallengeCard';
-import { DailyCompletionSheet } from '../components/shared/DailyCompletionSheet';
-import { MetricDetailSheet } from '../components/shared/MetricDetailSheet';
 import { DayCompleteOverlay } from '../components/shared/DayCompleteOverlay';
-import { WeeklyBossCard } from '../components/shared/WeeklyBossCard';
+import { XPFlyOut } from '../components/shared/XPFlyOut';
 import { CreateTaskModal } from '../components/shared/CreateTaskModal';
-import { GoalInputSheet } from '../components/shared/GoalInputSheet';
-import { GoalPlanPreviewSheet } from '../components/shared/GoalPlanPreviewSheet';
-import { useGoalStore } from '../store/useGoalStore';
-import { GoalPlan } from '../components/shared/GoalInputSheet';
 import { useCategoryStore } from '../store/useCategoryStore';
 import { useUserStore } from '../store/useUserStore';
 import { useTaskStore } from '../store/useTaskStore';
@@ -29,40 +24,137 @@ import { useFocusStore } from '../store/useFocusStore';
 import { useAchievementStore } from '../store/useAchievementStore';
 import { useStatsStore } from '../store/useStatsStore';
 import { useWeeklyBossStore } from '../store/useWeeklyBossStore';
-import { useRef } from 'react';
-import { getRankThreshold, getNextRankThreshold } from '../utils/xp';
 import { haptics } from '../utils/haptics';
 import { modeFromDuration } from '../utils/focus';
-import { MainTabParamList, Task } from '../types';
+import { MainTabParamList, Task, TaskPriority } from '../types';
 
+// ─── Priority config ──────────────────────────────────────────────────────────
+
+const PRIORITY_ORDER: TaskPriority[] = ['critical', 'high', 'medium', 'low'];
+const PRIORITY_COLOR: Record<TaskPriority, string> = {
+  critical: colors.danger.default,
+  high:     '#f97316',
+  medium:   colors.secondary.default,
+  low:      colors.text.muted,
+};
+const PRIORITY_LABEL: Record<TaskPriority, string> = {
+  critical: 'CRITICAL', high: 'HIGH', medium: 'MEDIUM', low: 'LOW',
+};
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+// ─── Animated category ring ───────────────────────────────────────────────────
+
+function HomeRing({ label, value, color, icon, streak, pulsing }: {
+  label: string; value: number; color: string;
+  icon: keyof typeof Ionicons.glyphMap; streak: number; pulsing: boolean;
+}) {
+  const scale = useSharedValue(1);
+
+  useEffect(() => {
+    if (pulsing) {
+      scale.value = withSequence(
+        withTiming(1.20, { duration: 150 }),
+        withTiming(0.92, { duration: 100 }),
+        withTiming(1.10, { duration: 100 }),
+        withTiming(1.0,  { duration: 120 }),
+      );
+    }
+  }, [pulsing]);
+
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  return (
+    <Animated.View style={[ringStyles.wrapper, animStyle]}>
+      <CircularProgress size={68} progress={value} strokeWidth={5} color={color} trackColor="#1c1c1c">
+        <View style={{ alignItems: 'center', gap: 1 }}>
+          <Ionicons name={icon} size={13} color={value > 0 ? color : colors.text.faint} />
+          <AText style={{ color: value > 0 ? colors.white : colors.text.faint, fontSize: 11, fontFamily: fontFamily.bold }}>
+            {Math.round(value * 100)}%
+          </AText>
+        </View>
+      </CircularProgress>
+      <AText style={[ringStyles.label, { color: value > 0 ? colors.white : colors.text.muted }]} numberOfLines={1}>
+        {label}
+      </AText>
+      {streak > 1 && (
+        <View style={[ringStyles.streak, { borderColor: color + '40', backgroundColor: color + '12' }]}>
+          <Ionicons name="flame" size={8} color={color} />
+          <AText style={{ color, fontSize: 8, fontFamily: fontFamily.bold }}>{streak}d</AText>
+        </View>
+      )}
+    </Animated.View>
+  );
+}
+
+const ringStyles = StyleSheet.create({
+  wrapper: { alignItems: 'center', gap: spacing[2] },
+  label:   { fontFamily: fontFamily.medium, fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' },
+  streak:  { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 99, borderWidth: 1 },
+});
+
+// ─── Priority section header ──────────────────────────────────────────────────
+
+function PriorityHeader({ priority }: { priority: TaskPriority }) {
+  return (
+    <View style={styles.priorityHeader}>
+      <View style={[styles.priorityBar, { backgroundColor: PRIORITY_COLOR[priority] }]} />
+      <AText style={[styles.priorityLabel, { color: PRIORITY_COLOR[priority] }]}>
+        {PRIORITY_LABEL[priority]}
+      </AText>
+    </View>
+  );
+}
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
 
 export function DashboardScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
-  const { profile, rank, rankProgress, pendingRankUp, clearRankUp, comboMultiplier, comboCount,
-          addXP, incrementTasksCompleted, incrementCombo, streakShields } = useUserStore();
-  const { todaysTasks, completedToday, completionRateToday, xpEarnedToday, completeTask } = useTaskStore();
+
+  const { profile, rank, pendingRankUp, clearRankUp, comboMultiplier, comboCount,
+          addXP, incrementTasksCompleted, incrementCombo } = useUserStore();
+  const { todaysTasks, completedToday, xpEarnedToday, completeTask } = useTaskStore();
   const { setPendingTask } = useFocusStore();
-  const { checkAchievements, getUnlocked } = useAchievementStore();
-  const { recordActivity, deepWorkSessions, recordCategoryActivity, categoryStreaks } = useStatsStore();
+  const { checkAchievements } = useAchievementStore();
+  const { recordActivity, categoryStreaks, recordCategoryActivity, deepWorkSessions } = useStatsStore();
   const { logTaskCompletion: bossTick } = useWeeklyBossStore();
-
   const { categories } = useCategoryStore();
-  const { goals } = useGoalStore();
-  const [showCompletionDetail, setShowCompletionDetail] = useState(false);
-  const [selectedMetric,       setSelectedMetric]       = useState<{ id: string; name: string; color: string; icon: string } | null>(null);
-  const [showCreateTask,       setShowCreateTask]       = useState(false);
-  const [showDayComplete,      setShowDayComplete]      = useState(false);
-  const [showGoalInput,        setShowGoalInput]        = useState(false);
-  const [pendingPlan,          setPendingPlan]          = useState<GoalPlan | null>(null);
-  const [pendingTargetDate,    setPendingTargetDate]    = useState('');
-  const hasCelebrated = useRef(false);
 
-  const rankInfo       = getRankThreshold(rank);
-  const nextRank       = getNextRankThreshold(rank);
-  const activeTasks    = todaysTasks().filter((t) => t.status === 'pending' || t.status === 'in_progress');
+  const [flyOutXP,       setFlyOutXP]       = useState<number | null>(null);
+  const [showCreateTask, setShowCreateTask]  = useState(false);
+  const [showDayComplete, setShowDayComplete] = useState(false);
+  const [pulsingCategory, setPulsingCategory] = useState<string | null>(null);
+  const hasCelebrated = useRef(false);
+  const pulseTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const todayActive    = todaysTasks().filter((t) => t.status !== 'completed');
   const completedCount = completedToday().length;
   const totalToday     = todaysTasks().length;
-  const completionRate = completionRateToday();
+  const completionRate = totalToday > 0 ? completedCount / totalToday : 0;
+  const todayXP        = xpEarnedToday();
+
+  const hour         = new Date().getHours();
+  const streakAtRisk = hour >= 21 && completedCount === 0 && profile.currentStreak > 0;
+  const dangerOpacity = useSharedValue(1);
+
+  useEffect(() => {
+    if (streakAtRisk) {
+      haptics.warning();
+      dangerOpacity.value = withRepeat(
+        withSequence(withTiming(0.3, { duration: 600 }), withTiming(1.0, { duration: 600 })),
+        -1, true,
+      );
+    } else {
+      dangerOpacity.value = 1;
+    }
+  }, [streakAtRisk]);
+
+  const streakDangerStyle = useAnimatedStyle(() => ({ opacity: dangerOpacity.value }));
 
   useEffect(() => {
     if (completionRate === 1 && totalToday > 0 && !hasCelebrated.current) {
@@ -71,410 +163,234 @@ export function DashboardScreen() {
     }
     if (completionRate < 1) hasCelebrated.current = false;
   }, [completionRate, totalToday]);
-  const todayXP        = xpEarnedToday();
-  const nextRankXP     = nextRank ? nextRank.minXP : profile.totalXP;
-  const level          = Math.floor(profile.totalXP / 1000) + 1;
-  const medalCount     = getUnlocked().length;
 
-  // Streak danger zone — after 9 PM with zero tasks done
-  const hour         = new Date().getHours();
-  const streakAtRisk = hour >= 21 && completedCount === 0 && profile.currentStreak > 0;
-  const dangerOpacity = useSharedValue(1);
-
-  useEffect(() => {
-    if (streakAtRisk) {
-      haptics.warning();
-      dangerOpacity.value = withRepeat(withSequence(withTiming(0.3, { duration: 600 }), withTiming(1.0, { duration: 600 })), -1, true);
-    } else {
-      dangerOpacity.value = 1;
-    }
-  }, [streakAtRisk]);
-
-  const streakDangerStyle = useAnimatedStyle(() => ({ opacity: dangerOpacity.value }));
-
-  // Tap quest card → derive mode from its duration, start immediately
-  function handleStartTask(task: Task) {
-    haptics.light();
-    const mode = modeFromDuration(task.estimatedMinutes);
-    setPendingTask(task.id, task.title, mode);
-    navigation.navigate('Focus');
-  }
-
-  // Checkmark button → complete the task in-place
   function handleCompleteTask(taskId: string) {
     haptics.success();
-    const task       = activeTasks.find((t) => t.id === taskId);
-    const baseXp     = completeTask(taskId, profile.currentStreak);
-    const bossBonus  = bossTick();
-    const earned     = Math.round(baseXp * comboMultiplier) + bossBonus;
+    const task     = todayActive.find((t) => t.id === taskId);
+    const baseXp   = completeTask(taskId, profile.currentStreak);
+    const bossBonus = bossTick();
+    const earned   = Math.round(baseXp * comboMultiplier) + bossBonus;
     addXP(earned);
     incrementTasksCompleted();
     incrementCombo();
-    if (task) recordCategoryActivity(task.category);
+    setFlyOutXP(earned);
+
+    if (task) {
+      recordCategoryActivity(task.category);
+      if (pulseTimer.current) clearTimeout(pulseTimer.current);
+      setPulsingCategory(task.category);
+      pulseTimer.current = setTimeout(() => setPulsingCategory(null), 1500);
+    }
     recordActivity({ xpEarned: earned, tasksCompleted: 1, streakDay: profile.currentStreak });
     checkAchievements({
-      totalTasks:       profile.tasksCompleted + 1,
-      currentStreak:    profile.currentStreak,
-      longestStreak:    profile.longestStreak,
+      totalTasks:     profile.tasksCompleted + 1,
+      currentStreak:  profile.currentStreak,
+      longestStreak:  profile.longestStreak,
       rank,
-      focusMinutes:     profile.focusMinutesTotal,
-      todayTasks:       completedToday().length + 1,
-      completionHour:   new Date().getHours(),
+      focusMinutes:   profile.focusMinutesTotal,
+      todayTasks:     completedToday().length + 1,
+      completionHour: new Date().getHours(),
       deepWorkSessions,
     });
   }
 
+  function handleStartTask(task: Task) {
+    haptics.light();
+    const mode = modeFromDuration(task.estimatedMinutes ?? 25);
+    setPendingTask(task.id, task.title, mode);
+    navigation.navigate('Focus');
+  }
+
+  // Build priority groups capped at 5 total
+  let capCount = 0;
+  const groups: Partial<Record<TaskPriority, Task[]>> = {};
+  for (const priority of PRIORITY_ORDER) {
+    if (capCount >= 5) break;
+    const grp  = todayActive.filter((t) => t.priority === priority);
+    const take = grp.slice(0, 5 - capCount);
+    if (take.length > 0) { groups[priority] = take; capCount += take.length; }
+  }
+  const hasMore    = todayActive.length > 5;
+  const flyOutColor = comboMultiplier > 1.0 ? '#fbbf24' : colors.primary.default;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <LinearGradient colors={['rgba(183,109,255,0.06)', 'transparent']} style={[styles.ambientTop, { pointerEvents: 'none' }]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} />
+      <LinearGradient
+        colors={['rgba(183,109,255,0.05)', 'transparent']}
+        style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
+        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.35 }}
+      />
 
-      {/* Header */}
+      {/* ── Compact header ── */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <View style={styles.avatar}><Ionicons name="person" size={16} color={colors.primary.default} /></View>
-          <AText variant="subheading" weight="bold" style={styles.logo}>AETHER OS</AText>
+          <View style={styles.avatar}>
+            <AText style={styles.avatarLetter}>
+              {profile.displayName.charAt(0).toUpperCase()}
+            </AText>
+          </View>
+          <View>
+            <AText style={styles.greeting}>{getGreeting()}</AText>
+            <AText style={styles.userName}>{profile.displayName}</AText>
+          </View>
         </View>
         <View style={styles.headerRight}>
-          <View style={styles.rankPill}>
-            <Ionicons name="ribbon" size={12} color={colors.primary.default} />
-            <AText variant="label" weight="bold" uppercase style={{ color: colors.primary.default, letterSpacing: 1.5 }}>{rankInfo.label}</AText>
-          </View>
-          <Pressable style={styles.quickAddBtn} onPress={() => { haptics.light(); setShowCreateTask(true); }}>
+          {profile.currentStreak > 0 && (
+            <Animated.View style={[styles.streakPill, streakAtRisk && streakDangerStyle]}>
+              <Ionicons name="flame" size={12} color={streakAtRisk ? colors.danger.default : '#fbbf24'} />
+              <AText style={[styles.streakText, { color: streakAtRisk ? colors.danger.default : '#fbbf24' }]}>
+                {profile.currentStreak}d
+              </AText>
+            </Animated.View>
+          )}
+          {todayXP > 0 && (
+            <View style={styles.xpPill}>
+              <Ionicons name="flash" size={12} color={colors.primary.default} />
+              <AText style={styles.xpText}>+{todayXP}</AText>
+            </View>
+          )}
+          <Pressable style={styles.addBtn} onPress={() => { haptics.light(); setShowCreateTask(true); }}>
             <Ionicons name="add" size={20} color={colors.primary.default} />
           </Pressable>
         </View>
       </View>
 
-      {/* Streak Danger Banner */}
+      {/* ── Banners ── */}
       {streakAtRisk && (
         <View style={styles.dangerBanner}>
           <Ionicons name="warning" size={14} color={colors.danger.default} />
-          <AText style={styles.dangerText}>⚠  STREAK AT RISK — complete a quest before midnight</AText>
+          <AText style={styles.dangerText}>Streak at risk — complete a quest before midnight</AText>
         </View>
       )}
-
-      {/* Combo Banner */}
       {comboMultiplier > 1.0 && (
         <View style={styles.comboBanner}>
-          <AText style={styles.comboText}>🔥  ×{comboMultiplier.toFixed(1)} COMBO  ·  {comboCount} in a row</AText>
+          <AText style={styles.comboText}>🔥 ×{comboMultiplier.toFixed(1)} COMBO · {comboCount} in a row</AText>
         </View>
       )}
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Hero Card */}
-        <Animated.View entering={FadeInDown.delay(0).duration(500).springify()}>
-        <View style={[styles.heroCard, streakAtRisk && { borderColor: colors.danger.default + '40' }]}>
-          <LinearGradient colors={['#1a1025', '#0a0a0a']} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} />
-          <View style={[styles.heroGlowBlob, { pointerEvents: 'none' }]} />
-          <View style={styles.heroContent}>
-            <View style={styles.levelRingWrapper}>
-              <View style={[styles.pulseRing, styles.pulseRingOuter]} />
-              <View style={[styles.pulseRing, styles.pulseRingInner]} />
-              <CircularProgress size={192} progress={rankProgress} strokeWidth={6} gradientColors={[colors.primary.default, colors.secondary.default]} trackColor="#2a2a2a">
-                <View style={styles.levelCenter}>
-                  <AText variant="label" color="muted" uppercase style={{ letterSpacing: 2 }}>Level</AText>
-                  <AText variant="display" weight="bold" style={styles.levelNumber}>{level}</AText>
-                </View>
-              </CircularProgress>
+
+        {/* ── Progress rings ── */}
+        <Animated.View entering={FadeInDown.delay(0).duration(400)}>
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <AText style={styles.sectionLabel}>TODAY'S PROGRESS</AText>
+              <AText style={styles.sectionSub}>{completedCount}/{totalToday} done</AText>
             </View>
-            <View style={styles.statsPanel}>
-              <View style={styles.statsRow}>
-                <View style={styles.statItem}>
-                  <AText variant="label" style={{ color: streakAtRisk ? colors.danger.default : colors.secondary.default, letterSpacing: 2, fontSize: 9 }} uppercase>Streak</AText>
-                  <View style={styles.statValueRow}>
-                    <Animated.Text style={[styles.statNumberLarge, { color: streakAtRisk ? colors.danger.default : colors.white }, streakAtRisk && streakDangerStyle]}>
-                      {profile.currentStreak}
-                    </Animated.Text>
-                    <AText variant="caption" color="muted"> DAYS</AText>
-                  </View>
-                  {streakAtRisk && <AText style={styles.streakRiskLabel}>AT RISK</AText>}
-                  {streakShields > 0 && (
-                    <View style={styles.shieldBadge}>
-                      <Ionicons name="shield-checkmark" size={10} color={colors.secondary.default} />
-                      <AText style={styles.shieldText}>{streakShields} SHIELD{streakShields > 1 ? 'S' : ''}</AText>
-                    </View>
-                  )}
-                </View>
-                <View style={styles.statDivider} />
-                <View style={[styles.statItem, { alignItems: 'flex-end' }]}>
-                  <AText variant="label" style={{ color: colors.secondary.default, letterSpacing: 2, fontSize: 9 }} uppercase>{rankInfo.label}</AText>
-                  <View style={styles.statValueRow}>
-                    <AText variant="heading" weight="bold" style={styles.statNumber}>{Math.round(rankProgress * 100)}%</AText>
-                  </View>
-                </View>
-              </View>
-              <XPBar currentXP={profile.totalXP} nextRankXP={nextRankXP} progress={rankProgress} />
+            <View style={styles.ringsRow}>
+              {categories.map((cat) => {
+                const catTasks = todaysTasks().filter((t) => t.category === cat.id);
+                const catDone  = catTasks.filter((t) => t.status === 'completed').length;
+                const catRate  = catTasks.length > 0 ? catDone / catTasks.length : 0;
+                return (
+                  <HomeRing
+                    key={cat.id}
+                    label={cat.name}
+                    value={catRate}
+                    color={cat.color}
+                    icon={cat.icon as keyof typeof Ionicons.glyphMap}
+                    streak={categoryStreaks[cat.id] ?? 0}
+                    pulsing={pulsingCategory === cat.id}
+                  />
+                );
+              })}
             </View>
           </View>
-          <View style={styles.heroBadges}>
-            <View style={[styles.heroBadge, activeTasks.length === 0 && { borderColor: colors.success.default + '30' }]}>
-              <Ionicons name={activeTasks.length === 0 ? 'checkmark-done-circle' : 'flash'} size={22} color={activeTasks.length === 0 ? colors.success.default : colors.primary.default} />
-              <View>
-                <AText variant="subheading" weight="bold" style={[styles.badgeNumber, activeTasks.length === 0 && { color: colors.success.default }]}>{activeTasks.length === 0 ? '✓' : activeTasks.length}</AText>
-                <AText variant="label" color="muted" style={{ fontSize: 9, letterSpacing: 1 }}>{activeTasks.length === 0 ? 'CLEAR' : 'PENDING'}</AText>
-              </View>
-            </View>
-            <View style={styles.heroBadge}><Ionicons name="ribbon" size={22} color={colors.text.muted} /><View><AText variant="subheading" weight="bold" style={styles.badgeNumber}>{medalCount}</AText><AText variant="label" color="muted" style={{ fontSize: 9, letterSpacing: 1 }}>MEDALS</AText></View></View>
-          </View>
-        </View>
         </Animated.View>
 
-        {/* Daily Completion Card — tap to open detail sheet */}
-        <Animated.View entering={FadeInDown.delay(80).duration(500).springify()}>
-        <Pressable
-          style={styles.completionCard}
-          onPress={() => { haptics.light(); setShowCompletionDetail(true); }}
-        >
-          <View style={styles.completionTop}>
-            <View style={styles.completionLeft}>
-              <View style={styles.completionIcon}><Ionicons name="calendar-outline" size={22} color={colors.primary.default} /></View>
-              <View>
-                <AText variant="body" weight="semiBold" style={styles.completionTitle}>Daily Completion</AText>
-                <AText variant="caption" color="muted" style={{ marginTop: 2 }}>{completedCount} of {totalToday} tasks completed</AText>
-              </View>
+        {/* ── Today's quests ── */}
+        <Animated.View entering={FadeInDown.delay(80).duration(400)}>
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <AText style={styles.sectionLabel}>TODAY'S QUESTS</AText>
+              <AText style={styles.sectionSub}>{todayActive.length} active</AText>
             </View>
-            <CircularProgress size={72} progress={completionRate} strokeWidth={6} color={colors.secondary.default} trackColor="#222222">
-              <AText variant="body" weight="bold" style={{ color: colors.white }}>{Math.round(completionRate * 100)}%</AText>
-            </CircularProgress>
-          </View>
-          <View style={styles.completionBarTrack}>
-            <LinearGradient colors={[colors.primary.container, colors.secondary.default]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.completionBarFill, { width: `${Math.max(completionRate * 100, 2)}%` as any }]} />
-          </View>
-          <View style={styles.completionStats}>
-            <View style={styles.completionStat}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>Completed</AText><AText variant="subheading" weight="bold">{completedCount}</AText></View>
-            <View style={[styles.completionStat, styles.completionStatBordered]}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>Total</AText><AText variant="subheading" weight="bold">{totalToday}</AText></View>
-            <View style={styles.completionStat}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>XP Today</AText><AText variant="subheading" weight="bold" style={{ color: colors.primary.default }}>+{todayXP}</AText></View>
-          </View>
-        </Pressable>
-        </Animated.View>
 
-        {/* Daily Challenge */}
-        <Animated.View entering={FadeInDown.delay(160).duration(500).springify()}>
-          <DailyChallengeCard />
-        </Animated.View>
-
-        {/* AI Goal Planner card */}
-        <Animated.View entering={FadeInDown.delay(220).duration(500).springify()}>
-          <Pressable style={styles.goalCard} onPress={() => { haptics.light(); setShowGoalInput(true); }}>
-            <LinearGradient colors={['rgba(183,109,255,0.10)', 'transparent']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} pointerEvents="none" />
-            <View style={styles.goalCardLeft}>
-              <View style={styles.goalCardIcon}>
-                <Ionicons name="planet-outline" size={20} color={colors.primary.default} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <AText variant="body" weight="bold" style={{ color: colors.white }}>AI Goal Planner</AText>
-                <AText variant="caption" color="muted" style={{ marginTop: 2 }}>
-                  {goals.length > 0 ? `${goals.length} active goal${goals.length > 1 ? 's' : ''}` : 'Tell AetherOS your goal →'}
+            {todayActive.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="checkmark-done-circle-outline" size={40} color={colors.success.default} />
+                <AText variant="body" color="muted" style={{ textAlign: 'center' }}>
+                  All quests complete. You crushed it today.
                 </AText>
               </View>
-            </View>
-            <View style={styles.goalCardRight}>
-              <Ionicons name="add-circle-outline" size={22} color={colors.primary.default} />
-            </View>
-          </Pressable>
-        </Animated.View>
+            ) : (
+              <View style={styles.questList}>
+                {PRIORITY_ORDER.map((priority) => {
+                  const grp = groups[priority];
+                  if (!grp || grp.length === 0) return null;
+                  return (
+                    <View key={priority} style={styles.priorityGroup}>
+                      <PriorityHeader priority={priority} />
+                      {grp.map((task) => (
+                        <QuestCard
+                          key={task.id}
+                          task={task}
+                          onStart={() => handleStartTask(task)}
+                          onComplete={() => handleCompleteTask(task.id)}
+                        />
+                      ))}
+                    </View>
+                  );
+                })}
 
-        {/* Weekly Boss */}
-        <Animated.View entering={FadeInDown.delay(240).duration(500).springify()}>
-          <WeeklyBossCard />
-        </Animated.View>
-
-        {/* Active Quests */}
-        <Animated.View entering={FadeInDown.delay(280).duration(500).springify()}>
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitle}><Ionicons name="radio-button-on" size={18} color={colors.primary.default} /><AText variant="caption" weight="bold" uppercase style={styles.sectionLabel}>Active Quests</AText></View>
-            <Pressable onPress={() => navigation.navigate('Tasks')}><AText variant="caption" style={{ color: colors.primary.default, letterSpacing: 1 }}>View All</AText></Pressable>
-          </View>
-          <View style={styles.questList}>
-            {activeTasks.slice(0, 3).map((task) => (
-              <QuestCard
-                key={task.id}
-                task={task}
-                onStart={() => handleStartTask(task)}
-                onComplete={() => handleCompleteTask(task.id)}
-              />
-            ))}
-            {activeTasks.length === 0 && (
-              <View style={styles.emptyState}>
-                <Ionicons name="checkmark-done-circle-outline" size={32} color={colors.success.default} />
-                <AText variant="body" color="muted" style={{ textAlign: 'center' }}>All quests complete for today.</AText>
+                {hasMore && (
+                  <Pressable
+                    style={styles.seeAllBtn}
+                    onPress={() => navigation.navigate('Tasks', { initialFilter: 'today' })}
+                  >
+                    <AText style={styles.seeAllText}>
+                      See all {todayActive.length} tasks
+                    </AText>
+                    <Ionicons name="arrow-forward" size={14} color={colors.primary.default} />
+                  </Pressable>
+                )}
               </View>
             )}
           </View>
-        </View>
         </Animated.View>
 
-        {/* System Metrics */}
-        <Animated.View entering={FadeInDown.delay(320).duration(500).springify()}>
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitle}><Ionicons name="analytics-outline" size={18} color={colors.secondary.default} /><AText variant="caption" weight="bold" uppercase style={styles.sectionLabel}>System Metrics</AText></View>
-          </View>
-          <View style={styles.metricsGrid}>
-            {categories.map((cat) => {
-              const catTasks = todaysTasks().filter((t) => t.category === cat.id);
-              const catDone  = catTasks.filter((t) => t.status === 'completed').length;
-              const catRate  = catTasks.length > 0 ? catDone / catTasks.length : 0;
-              return (
-                <MetricRing
-                  key={cat.id}
-                  label={cat.name}
-                  value={catRate}
-                  color={cat.color}
-                  icon={cat.icon as keyof typeof Ionicons.glyphMap}
-                  streak={categoryStreaks[cat.id] ?? 0}
-                  onPress={() => { haptics.light(); setSelectedMetric(cat); }}
-                />
-              );
-            })}
-          </View>
-        </View>
-        </Animated.View>
-
-        <View style={{ height: spacing[12] }} />
+        <View style={{ height: spacing[16] }} />
       </ScrollView>
 
+      <XPFlyOut xp={flyOutXP ?? 0} color={flyOutColor} visible={flyOutXP !== null} onHide={() => setFlyOutXP(null)} />
       <DayCompleteOverlay visible={showDayComplete} xpEarned={todayXP} streak={profile.currentStreak} onDismiss={() => setShowDayComplete(false)} />
       <RankUpOverlay rank={pendingRankUp ?? 'E'} visible={pendingRankUp !== null} onDismiss={clearRankUp} />
-      <DailyCompletionSheet visible={showCompletionDetail} onClose={() => setShowCompletionDetail(false)} />
-      {selectedMetric && (
-        <MetricDetailSheet
-          visible={!!selectedMetric}
-          onClose={() => setSelectedMetric(null)}
-          category={selectedMetric.id}
-          label={selectedMetric.name}
-          color={selectedMetric.color}
-          icon={selectedMetric.icon as keyof typeof Ionicons.glyphMap}
-        />
-      )}
       <CreateTaskModal visible={showCreateTask} onClose={() => setShowCreateTask(false)} />
-      <GoalInputSheet
-        visible={showGoalInput}
-        onClose={() => setShowGoalInput(false)}
-        onPlanReady={(plan, targetDate) => {
-          setPendingPlan(plan);
-          setPendingTargetDate(targetDate);
-          setShowGoalInput(false);
-        }}
-      />
-      <GoalPlanPreviewSheet
-        visible={!!pendingPlan}
-        plan={pendingPlan}
-        targetDate={pendingTargetDate}
-        onClose={() => setPendingPlan(null)}
-        onConfirm={() => setPendingPlan(null)}
-      />
     </SafeAreaView>
   );
 }
 
-function MetricRing({ label, value, color, icon, streak = 0, onPress }: {
-  label: string; value: number; color: string;
-  icon: keyof typeof Ionicons.glyphMap; streak?: number; onPress?: () => void;
-}) {
-  const glowAlpha  = Math.round(value * 55).toString(16).padStart(2, '0');
-  const borderAlpha = Math.round(value * 90).toString(16).padStart(2, '0');
-  const glowSize   = Math.round(value * 18);
-  const glowSpread = Math.round(value * 5);
-  const webGlow    = Platform.OS === 'web' && value > 0.05
-    ? { boxShadow: `0 0 ${glowSize}px ${glowSpread}px ${color}${glowAlpha}` } as any
-    : {};
-
-  return (
-    <Pressable
-      style={[
-        styles.metricCard,
-        { borderColor: value > 0.05 ? color + borderAlpha : colors.border.subtle },
-        webGlow,
-      ]}
-      onPress={onPress}
-    >
-      {value > 0.05 && (
-        <View style={[styles.metricGlow, { backgroundColor: color + Math.round(value * 20).toString(16).padStart(2, '0') }]} />
-      )}
-      <CircularProgress size={80} progress={value} strokeWidth={6} color={color} trackColor="#1a1a1a">
-        <View style={{ alignItems: 'center' }}>
-          <AText variant="caption" weight="bold" style={{ color: value > 0 ? colors.white : colors.text.faint, fontSize: 13 }}>
-            {Math.round(value * 100)}%
-          </AText>
-          <Ionicons name={icon} size={12} color={value > 0 ? color : colors.text.faint} style={{ marginTop: 2 }} />
-        </View>
-      </CircularProgress>
-      <AText variant="label" uppercase style={{ color: value > 0 ? colors.white : colors.text.muted, letterSpacing: 2, fontSize: 9, fontFamily: value > 0 ? fontFamily.bold : fontFamily.medium }}>
-        {label}
-      </AText>
-      {streak > 1 && (
-        <View style={[styles.catStreakBadge, { borderColor: color + '40', backgroundColor: color + '12' }]}>
-          <Ionicons name="flame" size={9} color={color} />
-          <AText style={[styles.catStreakText, { color }]}>{streak}d</AText>
-        </View>
-      )}
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: colors.bg.primary },
-  ambientTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 300, zIndex: 0 },
-  header:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing[5], paddingVertical: spacing[4], zIndex: 10, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  headerLeft:  { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  quickAddBtn: { width: 34, height: 34, borderRadius: radius.full, backgroundColor: colors.primary.faint, borderWidth: 1, borderColor: colors.primary.container + '50', alignItems: 'center', justifyContent: 'center' },
-  avatar: { width: 36, height: 36, borderRadius: radius.full, backgroundColor: colors.bg.high, borderWidth: 1, borderColor: colors.border.outline, alignItems: 'center', justifyContent: 'center' },
-  logo: { color: colors.primary.default + 'E6', letterSpacing: 4, fontSize: 16 },
-  rankPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing[3], paddingVertical: spacing[1], borderRadius: radius.full, backgroundColor: colors.primary.faint, borderWidth: 1, borderColor: colors.primary.default + '40' },
-  dangerBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], backgroundColor: colors.danger.container + 'AA', borderBottomWidth: 1, borderBottomColor: colors.danger.default + '30', paddingHorizontal: spacing[5], paddingVertical: spacing[3] },
-  dangerText: { fontFamily: fontFamily.semiBold, fontSize: 12, color: colors.danger.default, letterSpacing: 0.5, flex: 1 },
-  comboBanner: { alignSelf: 'center', paddingHorizontal: spacing[5], paddingVertical: spacing[2], marginTop: spacing[2], borderRadius: radius.full, backgroundColor: 'rgba(251,191,36,0.10)', borderWidth: 1, borderColor: 'rgba(251,191,36,0.30)' },
-  comboText: { fontFamily: fontFamily.bold, fontSize: 12, color: '#fbbf24', letterSpacing: 1 },
-  scroll: { flex: 1, zIndex: 5 },
-  scrollContent: { paddingHorizontal: spacing[5], paddingTop: spacing[5], gap: spacing[5] },
-  heroCard: { borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: colors.primary.default + '30', padding: spacing[6], gap: spacing[6] },
-  heroGlowBlob: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.primary.container + '18', borderRadius: 24 },
-  heroContent: { flexDirection: 'row', alignItems: 'center', gap: spacing[6] },
-  levelRingWrapper: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
-  pulseRing: { position: 'absolute', borderRadius: radius.full, borderWidth: 1, borderColor: colors.primary.default + '30' },
-  pulseRingOuter: { width: 216, height: 216, opacity: 0.4 },
-  pulseRingInner: { width: 230, height: 230, opacity: 0.2 },
-  levelCenter: { alignItems: 'center', gap: 2 },
-  levelNumber: { fontSize: 52, lineHeight: 56, color: colors.white },
-  statsPanel: { flex: 1, gap: spacing[5] },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: spacing[4], borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  statItem: { gap: 2 },
-  statValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
-  statNumber: { color: colors.white, fontSize: 22 },
-  statNumberLarge: { fontFamily: fontFamily.bold, fontSize: 22 },
-  statDivider: { width: 1, backgroundColor: colors.border.medium, alignSelf: 'stretch' },
-  streakRiskLabel: { fontFamily: fontFamily.bold, fontSize: 9, letterSpacing: 2, color: colors.danger.default },
-  heroBadges: { flexDirection: 'row', justifyContent: 'center', gap: spacing[4] },
-  heroBadge: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing[3], backgroundColor: 'rgba(17,17,17,0.8)', borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border.subtle, paddingHorizontal: spacing[5], paddingVertical: spacing[3], maxWidth: 160 },
-  badgeNumber: { color: colors.white, lineHeight: 22 },
-  completionCard: { backgroundColor: '#0e0e0e', borderRadius: 24, borderWidth: 1, borderColor: colors.border.subtle, padding: spacing[6], gap: spacing[5] },
-  completionTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  completionLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing[4], flex: 1 },
-  completionIcon: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.primary.faint, borderWidth: 1, borderColor: colors.primary.default + '30', alignItems: 'center', justifyContent: 'center' },
-  completionTitle: { color: colors.white, letterSpacing: 0.3 },
-  completionBarTrack: { height: 10, backgroundColor: '#1a1a1a', borderRadius: radius.full, overflow: 'hidden', borderWidth: 1, borderColor: colors.border.subtle },
-  completionBarFill: { height: '100%', borderRadius: radius.full },
-  completionStats: { flexDirection: 'row', paddingTop: spacing[4], borderTopWidth: 1, borderTopColor: colors.border.subtle },
-  completionStat: { flex: 1, alignItems: 'center', gap: 4 },
-  completionStatBordered: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border.subtle },
-  section: { gap: spacing[4] },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  sectionLabel: { color: colors.white, letterSpacing: 2, fontSize: 11 },
-  questList: { gap: spacing[3] },
-  emptyState: { alignItems: 'center', paddingVertical: spacing[8], gap: spacing[3] },
-  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[3] },
-  metricCard: { flex: 1, minWidth: '45%', backgroundColor: '#0a0a0a', borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border.subtle, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing[5], paddingHorizontal: spacing[3], gap: spacing[3], overflow: 'hidden' },
-  metricGlow: { position: 'absolute', width: 80, height: 80, borderRadius: radius.full, top: '50%', left: '50%', marginTop: -40, marginLeft: -40, opacity: 0.6 },
-  goalCard:       { borderRadius: 20, borderWidth: 1, borderColor: colors.primary.default + '30', backgroundColor: colors.bg.surface, padding: spacing[4], flexDirection: 'row', alignItems: 'center', overflow: 'hidden' },
-  goalCardLeft:   { flexDirection: 'row', alignItems: 'center', gap: spacing[3], flex: 1 },
-  goalCardIcon:   { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.primary.faint, borderWidth: 1, borderColor: colors.primary.default + '30', alignItems: 'center', justifyContent: 'center' },
-  goalCardRight:  { paddingLeft: spacing[3] },
-  shieldBadge:    { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
-  shieldText:     { fontFamily: fontFamily.bold, fontSize: 9, letterSpacing: 1, color: colors.secondary.default },
-  catStreakBadge: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 99, borderWidth: 1 },
-  catStreakText:  { fontFamily: fontFamily.bold, fontSize: 8, letterSpacing: 0.5 },
+  container:      { flex: 1, backgroundColor: colors.bg.primary },
+  header:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing[5], paddingVertical: spacing[3], borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  headerLeft:     { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  headerRight:    { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  avatar:         { width: 36, height: 36, borderRadius: radius.full, backgroundColor: colors.primary.faint, borderWidth: 1, borderColor: colors.primary.default + '40', alignItems: 'center', justifyContent: 'center' },
+  avatarLetter:   { fontFamily: fontFamily.bold, fontSize: 15, color: colors.primary.default },
+  greeting:       { fontFamily: fontFamily.regular, fontSize: 10, color: colors.text.faint, letterSpacing: 0.5 },
+  userName:       { fontFamily: fontFamily.bold, fontSize: 15, color: colors.white, letterSpacing: 0.2 },
+  streakPill:     { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: spacing[3], paddingVertical: 4, borderRadius: radius.full, backgroundColor: 'rgba(251,191,36,0.12)', borderWidth: 1, borderColor: 'rgba(251,191,36,0.30)' },
+  streakText:     { fontFamily: fontFamily.bold, fontSize: 12 },
+  xpPill:         { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: spacing[3], paddingVertical: 4, borderRadius: radius.full, backgroundColor: colors.primary.faint, borderWidth: 1, borderColor: colors.primary.default + '30' },
+  xpText:         { fontFamily: fontFamily.bold, fontSize: 12, color: colors.primary.default },
+  addBtn:         { width: 32, height: 32, borderRadius: radius.full, backgroundColor: colors.primary.faint, borderWidth: 1, borderColor: colors.primary.default + '40', alignItems: 'center', justifyContent: 'center' },
+  dangerBanner:   { flexDirection: 'row', alignItems: 'center', gap: spacing[2], backgroundColor: colors.danger.container + '99', borderBottomWidth: 1, borderBottomColor: colors.danger.default + '30', paddingHorizontal: spacing[5], paddingVertical: spacing[2] },
+  dangerText:     { fontFamily: fontFamily.semiBold, fontSize: 12, color: colors.danger.default, flex: 1 },
+  comboBanner:    { alignSelf: 'center', paddingHorizontal: spacing[5], paddingVertical: 5, marginTop: spacing[2], borderRadius: radius.full, backgroundColor: 'rgba(251,191,36,0.10)', borderWidth: 1, borderColor: 'rgba(251,191,36,0.30)' },
+  comboText:      { fontFamily: fontFamily.bold, fontSize: 12, color: '#fbbf24', letterSpacing: 0.5 },
+  scroll:         { flex: 1 },
+  scrollContent:  { paddingHorizontal: spacing[5], paddingTop: spacing[6], gap: spacing[6] },
+  section:        { gap: spacing[4] },
+  sectionHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  sectionLabel:   { fontFamily: fontFamily.bold, fontSize: 11, color: colors.text.muted, letterSpacing: 2 },
+  sectionSub:     { fontFamily: fontFamily.medium, fontSize: 12, color: colors.text.faint },
+  ringsRow:       { flexDirection: 'row', justifyContent: 'space-around' },
+  questList:      { gap: spacing[5] },
+  priorityGroup:  { gap: spacing[3] },
+  priorityHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  priorityBar:    { width: 3, height: 13, borderRadius: 2 },
+  priorityLabel:  { fontFamily: fontFamily.bold, fontSize: 10, letterSpacing: 2 },
+  seeAllBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], paddingVertical: spacing[3], borderRadius: radius.lg, borderWidth: 1, borderColor: colors.primary.default + '30', backgroundColor: colors.primary.faint },
+  seeAllText:     { fontFamily: fontFamily.semiBold, fontSize: 14, color: colors.primary.default },
+  emptyState:     { alignItems: 'center', paddingVertical: spacing[12], gap: spacing[3] },
 });
