@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,36 +16,38 @@ import { useWeeklyBossStore } from '../store/useWeeklyBossStore';
 import { useAchievementStore } from '../store/useAchievementStore';
 import { useStatsStore } from '../store/useStatsStore';
 import { haptics } from '../utils/haptics';
+import { playSuccessSound } from '../utils/sound';
+import { requestNotificationPermissions, scheduleTimerCompletion, cancelTimerNotifications } from '../utils/notifications';
 import { FocusMode } from '../types';
 
 interface ModeConfig {
-  key:      FocusMode;
-  label:    string;
+  key: FocusMode;
+  label: string;
   subtitle: string;
-  minutes:  number;
-  xp:       number;
-  color:    string;
-  icon:     keyof typeof Ionicons.glyphMap;
+  minutes: number;
+  xp: number;
+  color: string;
+  icon: keyof typeof Ionicons.glyphMap;
   gradient: [string, string];
 }
 
 const MODES: ModeConfig[] = [
-  { key: 'deep',   label: 'Deep Work',  subtitle: 'No interruptions. Full immersion.',   minutes: 90, xp: 500, color: colors.primary.default,   icon: 'skull-outline',   gradient: ['rgba(183,109,255,0.12)', 'transparent'] },
-  { key: 'flow',   label: 'Flow State', subtitle: 'Sustained focus. Steady output.',     minutes: 60, xp: 300, color: colors.secondary.default,  icon: 'water-outline',   gradient: ['rgba(173,198,255,0.12)', 'transparent'] },
-  { key: 'sprint', label: 'Sprint',     subtitle: 'Short burst. Fast wins.',             minutes: 25, xp: 150, color: colors.success.default,    icon: 'flash-outline',   gradient: ['rgba(16,185,129,0.12)',  'transparent'] },
-  { key: 'custom', label: 'Custom',     subtitle: 'Your time. Your rules.',              minutes: 0,  xp: 0,   color: '#fbbf24',                  icon: 'create-outline',  gradient: ['rgba(251,191,36,0.12)',  'transparent'] },
+  { key: 'deep', label: 'Deep Work', subtitle: 'No interruptions. Full immersion.', minutes: 90, xp: 500, color: colors.primary.default, icon: 'skull-outline', gradient: ['rgba(183,109,255,0.12)', 'transparent'] },
+  { key: 'flow', label: 'Flow State', subtitle: 'Sustained focus. Steady output.', minutes: 60, xp: 300, color: colors.secondary.default, icon: 'water-outline', gradient: ['rgba(173,198,255,0.12)', 'transparent'] },
+  { key: 'sprint', label: 'Sprint', subtitle: 'Short burst. Fast wins.', minutes: 25, xp: 150, color: colors.success.default, icon: 'flash-outline', gradient: ['rgba(16,185,129,0.12)', 'transparent'] },
+  { key: 'custom', label: 'Custom', subtitle: 'Your time. Your rules.', minutes: 0, xp: 0, color: '#fbbf24', icon: 'create-outline', gradient: ['rgba(251,191,36,0.12)', 'transparent'] },
 ];
 
 type Stage = 'select' | 'custom_input' | 'ready' | 'running' | 'complete';
 
 export function FocusScreen() {
-  const isFocused       = useIsFocused();
-  const [stage,         setStage]         = useState<Stage>('select');
-  const [activeMode,    setActiveMode]    = useState<ModeConfig>(MODES[0]);
-  const [secondsLeft,   setSecondsLeft]   = useState(0);
-  const [isPaused,      setIsPaused]      = useState(false);
-  const [xpEarned,      setXpEarned]      = useState(0);
-  const [flyOutXP,      setFlyOutXP]      = useState<number | null>(null);
+  const isFocused = useIsFocused();
+  const [stage, setStage] = useState<Stage>('select');
+  const [activeMode, setActiveMode] = useState<ModeConfig>(MODES[0]);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [xpEarned, setXpEarned] = useState(0);
+  const [flyOutXP, setFlyOutXP] = useState<number | null>(null);
   const [customMinutes, setCustomMinutes] = useState(30);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -72,28 +74,45 @@ export function FocusScreen() {
     setIsPaused(false);
   }
 
-  function startSession(mode: ModeConfig) {
+  async function startSession(mode: ModeConfig) {
+    await requestNotificationPermissions();
     prepareSession(mode);
     setStage('running');
+    scheduleTimerCompletion(mode.label, mode.minutes * 60);
   }
 
-  function startPreparedSession() {
+  async function startPreparedSession() {
+    await requestNotificationPermissions();
     setIsPaused(false);
     setStage('running');
+    scheduleTimerCompletion(activeMode.label, secondsLeft);
+  }
+
+  async function togglePause() {
+    const willPause = !isPaused;
+    setIsPaused(willPause);
+    if (willPause) {
+      await cancelTimerNotifications();
+    } else {
+      await requestNotificationPermissions();
+      await scheduleTimerCompletion(activeMode.label, secondsLeft);
+    }
   }
 
   function handleComplete() {
     clearInterval(intervalRef.current!);
-    const earned        = activeMode.xp;
+    cancelTimerNotifications();
+    const earned = activeMode.xp;
     const challengeBonus = logChallengeMinutes(activeMode.minutes);
-    const bossBonus      = logBossMinutes(activeMode.minutes);
-    const total          = earned + challengeBonus + bossBonus;
+    const bossBonus = logBossMinutes(activeMode.minutes);
+    const total = earned + challengeBonus + bossBonus;
     setXpEarned(total);
     addXP(total);
     addFocusMinutes(activeMode.minutes);
     incrementCombo();
     clearPendingTask();
     haptics.focusComplete();
+    playSuccessSound();
     setFlyOutXP(total);
 
     const isDeepWork = activeMode.key === 'deep';
@@ -105,9 +124,10 @@ export function FocusScreen() {
 
   function handleEnd() {
     clearInterval(intervalRef.current!);
-    const elapsed        = activeMode.minutes * 60 - secondsLeft;
+    cancelTimerNotifications();
+    const elapsed = activeMode.minutes * 60 - secondsLeft;
     const elapsedMinutes = Math.floor(elapsed / 60);
-    const earnedPartial  = Math.round((elapsed / (activeMode.minutes * 60)) * activeMode.xp);
+    const earnedPartial = Math.round((elapsed / (activeMode.minutes * 60)) * activeMode.xp);
     let total = earnedPartial;
     if (elapsedMinutes > 0) {
       total += logChallengeMinutes(elapsedMinutes);
@@ -122,18 +142,22 @@ export function FocusScreen() {
   }
 
   function handleRestart() {
+    cancelTimerNotifications();
     clearPendingTask(); setStage('select'); setIsPaused(false); setSecondsLeft(0);
   }
 
-  function startCustomSession() {
-    const mins = Math.min(180, Math.max(5, customMinutes));
-    const xp   = Math.max(Math.round(mins * 3), 50);
+  async function startCustomSession() {
+    const mins = Math.min(180, Math.max(1, customMinutes));
+    const xp = Math.max(Math.round(mins * 3), 50);
     const mode: ModeConfig = {
       key: 'custom', label: 'Custom', subtitle: 'Your time. Your rules.',
       minutes: mins, xp, color: '#fbbf24', icon: 'create-outline',
       gradient: ['rgba(251,191,36,0.12)', 'transparent'],
     };
-    startSession(mode);
+    await requestNotificationPermissions();
+    prepareSession(mode);
+    setStage('running');
+    scheduleTimerCompletion(mode.label, mode.minutes * 60);
   }
 
   useEffect(() => {
@@ -144,58 +168,85 @@ export function FocusScreen() {
     return () => clearInterval(intervalRef.current!);
   }, [stage, isPaused]);
 
-  if (stage === 'select')       return <ModeSelectView onSelect={startSession} onCustom={() => setStage('custom_input')} />;
-  if (stage === 'custom_input') return <CustomInputView customMinutes={customMinutes} setCustomMinutes={setCustomMinutes} onStart={startCustomSession} onBack={() => setStage('select')} />;
-  if (stage === 'ready')        return <ReadyView mode={activeMode} secondsLeft={secondsLeft} pendingTaskTitle={pendingTaskTitle} onStart={startPreparedSession} onCancel={handleRestart} />;
-  if (stage === 'complete')     return <CompleteView mode={activeMode} xp={xpEarned} onRestart={handleRestart} />;
+  // Handle background/foreground state to keep timer accurate
+  const appState = useRef(AppState.currentState);
+  const backgroundTime = useRef<number | null>(null);
 
-  const total    = activeMode.minutes * 60;
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        // App has come to the foreground
+        if (backgroundTime.current && stage === 'running' && !isPaused) {
+          const elapsedSeconds = Math.floor((Date.now() - backgroundTime.current) / 1000);
+          setSecondsLeft((prev) => Math.max(0, prev - elapsedSeconds));
+        }
+      } else if (nextAppState.match(/inactive|background/)) {
+        // App went to the background
+        backgroundTime.current = Date.now();
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [stage, isPaused]);
+
+  if (stage === 'select') return <ModeSelectView onSelect={startSession} onCustom={() => setStage('custom_input')} />;
+  if (stage === 'custom_input') return <CustomInputView customMinutes={customMinutes} setCustomMinutes={setCustomMinutes} onStart={startCustomSession} onBack={() => setStage('select')} />;
+  if (stage === 'ready') return <ReadyView mode={activeMode} secondsLeft={secondsLeft} pendingTaskTitle={pendingTaskTitle} onStart={startPreparedSession} onCancel={handleRestart} />;
+  if (stage === 'complete') return <CompleteView mode={activeMode} xp={xpEarned} onRestart={handleRestart} />;
+
+  const total = activeMode.minutes * 60;
   const progress = (total - secondsLeft) / total;
-  const mins     = Math.floor(secondsLeft / 60);
-  const secs     = secondsLeft % 60;
-  const timeStr  = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  const mins = Math.floor(secondsLeft / 60);
+  const secs = secondsLeft % 60;
+  const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 
   return (
     <View style={styles.screenShell}>
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <LinearGradient colors={activeMode.gradient} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.5 }} />
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <LinearGradient colors={activeMode.gradient} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.5 }} />
 
-      <View style={styles.timerHeader}>
-        <Pressable onPress={handleEnd} style={styles.endBtn}>
-          <Ionicons name="close" size={18} color={colors.text.muted} />
-          <AText variant="label" color="muted">End</AText>
-        </Pressable>
-        <AText variant="label" weight="bold" uppercase style={{ color: activeMode.color, letterSpacing: 2 }}>{activeMode.label}</AText>
-        <Pressable style={styles.pauseBtn} onPress={() => setIsPaused((p) => !p)}>
-          <Ionicons name={isPaused ? 'play' : 'pause'} size={18} color={colors.text.muted} />
-        </Pressable>
-      </View>
-
-      {pendingTaskTitle && (
-        <View style={styles.linkedTask}>
-          <Ionicons name="link-outline" size={12} color={colors.text.muted} />
-          <AText variant="caption" color="muted" numberOfLines={1} style={{ flex: 1 }}>{pendingTaskTitle}</AText>
+        <View style={styles.timerHeader}>
+          <Pressable onPress={handleEnd} style={styles.endBtn}>
+            <Ionicons name="close" size={18} color={colors.text.muted} />
+            <AText variant="label" color="muted">End</AText>
+          </Pressable>
+          <AText variant="label" weight="bold" uppercase style={{ color: activeMode.color, letterSpacing: 2 }}>{activeMode.label}</AText>
+          <Pressable style={styles.pauseBtn} onPress={togglePause}>
+            <Ionicons name={isPaused ? 'play' : 'pause'} size={18} color={colors.text.muted} />
+          </Pressable>
         </View>
-      )}
 
-      <View style={styles.timerCenter}>
-        <CircularProgress size={280} progress={progress} strokeWidth={8} color={activeMode.color} trackColor={colors.bg.high}>
-          <View style={styles.timerInner}>
-            {isPaused && <AText variant="label" color="muted" uppercase style={{ letterSpacing: 3, marginBottom: 4 }}>Paused</AText>}
-            <AText style={[styles.timeDisplay, { color: activeMode.color }]}>{timeStr}</AText>
-            <AText variant="label" color="muted" uppercase style={{ letterSpacing: 2, marginTop: 4 }}>Remaining</AText>
+        {pendingTaskTitle && (
+          <View style={styles.linkedTask}>
+            <Ionicons name="link-outline" size={12} color={colors.text.muted} />
+            <AText variant="caption" color="muted" numberOfLines={1} style={{ flex: 1 }}>{pendingTaskTitle}</AText>
           </View>
-        </CircularProgress>
-      </View>
+        )}
 
-      <XPFlyOut xp={flyOutXP ?? 0} color={activeMode.color} visible={flyOutXP !== null} onHide={() => setFlyOutXP(null)} />
+        <View style={styles.timerCenter}>
+          <CircularProgress size={280} progress={progress} strokeWidth={8} color={activeMode.color} trackColor={colors.bg.high}>
+            <View style={styles.timerInner}>
+              {isPaused && <AText variant="label" color="muted" uppercase style={{ letterSpacing: 3, marginBottom: 4 }}>Paused</AText>}
+              <AText style={[styles.timeDisplay, { color: activeMode.color }]}>{timeStr}</AText>
+              <AText variant="label" color="muted" uppercase style={{ letterSpacing: 2, marginTop: 4 }}>Remaining</AText>
+            </View>
+          </CircularProgress>
+        </View>
 
-      <View style={styles.timerFooter}>
-        <View style={styles.timerStat}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>XP Reward</AText><AText variant="subheading" weight="bold" style={{ color: activeMode.color }}>+{activeMode.xp}</AText></View>
-        <View style={[styles.timerStat, { borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border.subtle }]}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>Mode</AText><AText variant="body" weight="semiBold">{activeMode.label}</AText></View>
-        <View style={styles.timerStat}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>Duration</AText><AText variant="subheading" weight="bold">{activeMode.minutes}m</AText></View>
-      </View>
-    </SafeAreaView>
+        <XPFlyOut xp={flyOutXP ?? 0} color={activeMode.color} visible={flyOutXP !== null} onHide={() => setFlyOutXP(null)} />
+
+        <View style={styles.timerFooter}>
+          <View style={styles.timerStat}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>XP Reward</AText><AText variant="subheading" weight="bold" style={{ color: activeMode.color }}>+{activeMode.xp}</AText></View>
+          <View style={[styles.timerStat, { borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border.subtle }]}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>Mode</AText><AText variant="body" weight="semiBold">{activeMode.label}</AText></View>
+          <View style={styles.timerStat}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>Duration</AText><AText variant="subheading" weight="bold">{activeMode.minutes}m</AText></View>
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
@@ -213,9 +264,9 @@ function ReadyView({
   onStart: () => void;
   onCancel: () => void;
 }) {
-  const total   = mode.minutes * 60;
-  const mins    = Math.floor(secondsLeft / 60);
-  const secs    = secondsLeft % 60;
+  const total = mode.minutes * 60;
+  const mins = Math.floor(secondsLeft / 60);
+  const secs = secondsLeft % 60;
   const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 
   return (
@@ -312,15 +363,15 @@ function ModeSelectView({ onSelect, onCustom }: { onSelect: (m: ModeConfig) => v
 const CUSTOM_PRESETS = [15, 25, 45, 60, 90];
 
 function CustomInputView({ customMinutes, setCustomMinutes, onStart, onBack }: {
-  customMinutes:    number;
+  customMinutes: number;
   setCustomMinutes: (m: number) => void;
-  onStart:          () => void;
-  onBack:           () => void;
+  onStart: () => void;
+  onBack: () => void;
 }) {
   const xp = Math.max(Math.round(customMinutes * 3), 50);
 
   function adjust(delta: number) {
-    setCustomMinutes(Math.min(180, Math.max(5, customMinutes + delta)));
+    setCustomMinutes(Math.min(180, Math.max(1, customMinutes + delta)));
   }
 
   return (
@@ -403,38 +454,38 @@ function CompleteView({ mode, xp, onRestart }: { mode: ModeConfig; xp: number; o
 
 const styles = StyleSheet.create({
   screenShell: { flex: 1, backgroundColor: colors.bg.primary },
-  container:   { flex: 1, backgroundColor: colors.bg.primary },
+  container: { flex: 1, backgroundColor: colors.bg.primary },
   selectHeader: { paddingHorizontal: spacing[5], paddingTop: spacing[4], paddingBottom: spacing[6] },
-  modeList:    { paddingHorizontal: spacing[5], gap: spacing[3] },
-  modeCard:    { flexDirection: 'row', alignItems: 'center', gap: spacing[4], backgroundColor: colors.bg.surface, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border.subtle, padding: spacing[4], overflow: 'hidden' },
+  modeList: { paddingHorizontal: spacing[5], gap: spacing[3] },
+  modeCard: { flexDirection: 'row', alignItems: 'center', gap: spacing[4], backgroundColor: colors.bg.surface, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border.subtle, padding: spacing[4], overflow: 'hidden' },
   modeIconBox: { width: 52, height: 52, borderRadius: radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  modeInfo:    { flex: 1 },
-  modeMeta:    { alignItems: 'flex-end', gap: 2 },
+  modeInfo: { flex: 1 },
+  modeMeta: { alignItems: 'flex-end', gap: 2 },
   timerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing[5], paddingVertical: spacing[4] },
-  endBtn:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderRadius: radius.full, borderWidth: 1, borderColor: colors.border.default },
-  pauseBtn:    { width: 36, height: 36, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border.default, alignItems: 'center', justifyContent: 'center' },
-  linkedTask:  { flexDirection: 'row', alignItems: 'center', gap: spacing[2], alignSelf: 'center', paddingHorizontal: spacing[4], paddingVertical: spacing[2], borderRadius: radius.full, backgroundColor: colors.bg.elevated, borderWidth: 1, borderColor: colors.border.default, maxWidth: 260, marginBottom: spacing[2] },
+  endBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderRadius: radius.full, borderWidth: 1, borderColor: colors.border.default },
+  pauseBtn: { width: 36, height: 36, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border.default, alignItems: 'center', justifyContent: 'center' },
+  linkedTask: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], alignSelf: 'center', paddingHorizontal: spacing[4], paddingVertical: spacing[2], borderRadius: radius.full, backgroundColor: colors.bg.elevated, borderWidth: 1, borderColor: colors.border.default, maxWidth: 260, marginBottom: spacing[2] },
   timerCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  timerInner:  { alignItems: 'center' },
+  timerInner: { alignItems: 'center' },
   timeDisplay: { fontSize: 56, fontFamily: fontFamily.bold, letterSpacing: 2, lineHeight: 64 },
-  startBtn:    { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[4], paddingHorizontal: spacing[5], paddingVertical: spacing[3], borderRadius: radius.full, borderWidth: 1 },
+  startBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[4], paddingHorizontal: spacing[5], paddingVertical: spacing[3], borderRadius: radius.full, borderWidth: 1 },
   timerFooter: { flexDirection: 'row', marginHorizontal: spacing[5], marginBottom: spacing[8], backgroundColor: colors.bg.surface, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border.subtle, overflow: 'hidden' },
-  timerStat:   { flex: 1, alignItems: 'center', paddingVertical: spacing[4], gap: 4 },
+  timerStat: { flex: 1, alignItems: 'center', paddingVertical: spacing[4], gap: 4 },
   completeOrb: { width: 120, height: 120, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border.default, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg.elevated, marginBottom: spacing[6] },
   completeText: { alignItems: 'center', marginBottom: spacing[6] },
-  xpBanner:   { flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[6], paddingVertical: spacing[3], borderRadius: radius.full, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.bg.elevated, marginBottom: spacing[8] },
+  xpBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[6], paddingVertical: spacing[3], borderRadius: radius.full, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.bg.elevated, marginBottom: spacing[8] },
   xpBannerText: { fontFamily: fontFamily.bold, fontSize: 22 },
   restartBtn: { paddingHorizontal: spacing[8], paddingVertical: spacing[4], borderRadius: radius.full, borderWidth: 1 },
 
   // Custom input view
-  customCenter:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  customPicker:       { flexDirection: 'row', alignItems: 'center', gap: spacing[6], marginBottom: spacing[6] },
-  adjustBtn:          { width: 52, height: 52, borderRadius: radius.full, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  customDisplay:      { alignItems: 'center', minWidth: 120 },
-  customMinutes:      { fontFamily: fontFamily.bold, fontSize: 72, color: '#fbbf24', lineHeight: 80, letterSpacing: -2 },
-  presetRow:          { flexDirection: 'row', gap: spacing[2] },
-  presetBtn:          { paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderRadius: radius.full, borderWidth: 1, borderColor: colors.border.default },
+  customCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  customPicker: { flexDirection: 'row', alignItems: 'center', gap: spacing[6], marginBottom: spacing[6] },
+  adjustBtn: { width: 52, height: 52, borderRadius: radius.full, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  customDisplay: { alignItems: 'center', minWidth: 120 },
+  customMinutes: { fontFamily: fontFamily.bold, fontSize: 72, color: '#fbbf24', lineHeight: 80, letterSpacing: -2 },
+  presetRow: { flexDirection: 'row', gap: spacing[2] },
+  presetBtn: { paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderRadius: radius.full, borderWidth: 1, borderColor: colors.border.default },
   customStartWrapper: { paddingHorizontal: spacing[5], paddingBottom: spacing[8] },
-  customStartBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], backgroundColor: '#fbbf2420', borderWidth: 1, borderColor: '#fbbf2450', borderRadius: radius.full, paddingVertical: spacing[4] },
-  customStartText:    { fontFamily: fontFamily.semiBold, fontSize: 16, color: '#fbbf24', letterSpacing: 0.5 },
+  customStartBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], backgroundColor: '#fbbf2420', borderWidth: 1, borderColor: '#fbbf2450', borderRadius: radius.full, paddingVertical: spacing[4] },
+  customStartText: { fontFamily: fontFamily.semiBold, fontSize: 16, color: '#fbbf24', letterSpacing: 0.5 },
 });
