@@ -3,6 +3,8 @@ import { View, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
+import Animated from 'react-native-reanimated';
 import { colors, spacing, radius, fontFamily } from '../theme';
 import { AText } from '../components/ui/AText';
 import { CircularProgress } from '../components/shared/CircularProgress';
@@ -34,9 +36,10 @@ const MODES: ModeConfig[] = [
   { key: 'custom', label: 'Custom',     subtitle: 'Your time. Your rules.',              minutes: 0,  xp: 0,   color: '#fbbf24',                  icon: 'create-outline',  gradient: ['rgba(251,191,36,0.12)',  'transparent'] },
 ];
 
-type Stage = 'select' | 'custom_input' | 'running' | 'complete';
+type Stage = 'select' | 'custom_input' | 'ready' | 'running' | 'complete';
 
 export function FocusScreen() {
+  const isFocused       = useIsFocused();
   const [stage,         setStage]         = useState<Stage>('select');
   const [activeMode,    setActiveMode]    = useState<ModeConfig>(MODES[0]);
   const [secondsLeft,   setSecondsLeft]   = useState(0);
@@ -54,15 +57,27 @@ export function FocusScreen() {
   const { recordActivity, deepWorkSessions } = useStatsStore();
 
   useEffect(() => {
-    if (autoStartMode && stage === 'select') {
-      const mode = MODES.find((m) => m.key === autoStartMode) ?? MODES[1];
-      startSession(mode);
-    }
-  }, [autoStartMode]);
+    if (!isFocused) return;
 
-  function startSession(mode: ModeConfig) {
+    if (autoStartMode && stage !== 'ready' && stage !== 'running' && stage !== 'custom_input') {
+      const mode = MODES.find((m) => m.key === autoStartMode) ?? MODES[1];
+      prepareSession(mode);
+      setStage('ready');
+    }
+  }, [isFocused, autoStartMode, stage]);
+
+  function prepareSession(mode: ModeConfig) {
     setActiveMode(mode);
     setSecondsLeft(mode.minutes * 60);
+    setIsPaused(false);
+  }
+
+  function startSession(mode: ModeConfig) {
+    prepareSession(mode);
+    setStage('running');
+  }
+
+  function startPreparedSession() {
     setIsPaused(false);
     setStage('running');
   }
@@ -131,6 +146,7 @@ export function FocusScreen() {
 
   if (stage === 'select')       return <ModeSelectView onSelect={startSession} onCustom={() => setStage('custom_input')} />;
   if (stage === 'custom_input') return <CustomInputView customMinutes={customMinutes} setCustomMinutes={setCustomMinutes} onStart={startCustomSession} onBack={() => setStage('select')} />;
+  if (stage === 'ready')        return <ReadyView mode={activeMode} secondsLeft={secondsLeft} pendingTaskTitle={pendingTaskTitle} onStart={startPreparedSession} onCancel={handleRestart} />;
   if (stage === 'complete')     return <CompleteView mode={activeMode} xp={xpEarned} onRestart={handleRestart} />;
 
   const total    = activeMode.minutes * 60;
@@ -140,6 +156,7 @@ export function FocusScreen() {
   const timeStr  = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 
   return (
+    <View style={styles.screenShell}>
     <SafeAreaView style={styles.container} edges={['top']}>
       <LinearGradient colors={activeMode.gradient} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.5 }} />
 
@@ -179,6 +196,69 @@ export function FocusScreen() {
         <View style={styles.timerStat}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>Duration</AText><AText variant="subheading" weight="bold">{activeMode.minutes}m</AText></View>
       </View>
     </SafeAreaView>
+    </View>
+  );
+}
+
+function ReadyView({
+  mode,
+  secondsLeft,
+  pendingTaskTitle,
+  onStart,
+  onCancel,
+}: {
+  mode: ModeConfig;
+  secondsLeft: number;
+  pendingTaskTitle: string | null;
+  onStart: () => void;
+  onCancel: () => void;
+}) {
+  const total   = mode.minutes * 60;
+  const mins    = Math.floor(secondsLeft / 60);
+  const secs    = secondsLeft % 60;
+  const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+  return (
+    <View style={styles.screenShell}>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <LinearGradient colors={mode.gradient} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.5 }} />
+
+        <View style={styles.timerHeader}>
+          <Pressable onPress={onCancel} style={styles.endBtn}>
+            <Ionicons name="close" size={18} color={colors.text.muted} />
+            <AText variant="label" color="muted">Cancel</AText>
+          </Pressable>
+          <AText variant="label" weight="bold" uppercase style={{ color: mode.color, letterSpacing: 2 }}>{mode.label}</AText>
+          <View style={styles.pauseBtn} />
+        </View>
+
+        {pendingTaskTitle && (
+          <View style={styles.linkedTask}>
+            <Ionicons name="link-outline" size={12} color={colors.text.muted} />
+            <AText variant="caption" color="muted" numberOfLines={1} style={{ flex: 1 }}>{pendingTaskTitle}</AText>
+          </View>
+        )}
+
+        <View style={styles.timerCenter}>
+          <CircularProgress size={280} progress={total > 0 ? 0 : 0} strokeWidth={8} color={mode.color} trackColor={colors.bg.high}>
+            <View style={styles.timerInner}>
+              <AText variant="label" color="muted" uppercase style={{ letterSpacing: 3, marginBottom: 4 }}>Ready</AText>
+              <AText style={[styles.timeDisplay, { color: mode.color }]}>{timeStr}</AText>
+              <Pressable style={[styles.startBtn, { borderColor: mode.color + '50', backgroundColor: mode.color + '15' }]} onPress={onStart}>
+                <Ionicons name="play" size={20} color={mode.color} />
+                <AText variant="body" weight="semiBold" style={{ color: mode.color }}>Start</AText>
+              </Pressable>
+            </View>
+          </CircularProgress>
+        </View>
+
+        <View style={styles.timerFooter}>
+          <View style={styles.timerStat}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>XP Reward</AText><AText variant="subheading" weight="bold" style={{ color: mode.color }}>+{mode.xp}</AText></View>
+          <View style={[styles.timerStat, { borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border.subtle }]}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>Mode</AText><AText variant="body" weight="semiBold">{mode.label}</AText></View>
+          <View style={styles.timerStat}><AText variant="label" color="muted" uppercase style={{ letterSpacing: 1.5, fontSize: 9 }}>Duration</AText><AText variant="subheading" weight="bold">{mode.minutes}m</AText></View>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -322,6 +402,7 @@ function CompleteView({ mode, xp, onRestart }: { mode: ModeConfig; xp: number; o
 }
 
 const styles = StyleSheet.create({
+  screenShell: { flex: 1, backgroundColor: colors.bg.primary },
   container:   { flex: 1, backgroundColor: colors.bg.primary },
   selectHeader: { paddingHorizontal: spacing[5], paddingTop: spacing[4], paddingBottom: spacing[6] },
   modeList:    { paddingHorizontal: spacing[5], gap: spacing[3] },
@@ -336,6 +417,7 @@ const styles = StyleSheet.create({
   timerCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   timerInner:  { alignItems: 'center' },
   timeDisplay: { fontSize: 56, fontFamily: fontFamily.bold, letterSpacing: 2, lineHeight: 64 },
+  startBtn:    { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[4], paddingHorizontal: spacing[5], paddingVertical: spacing[3], borderRadius: radius.full, borderWidth: 1 },
   timerFooter: { flexDirection: 'row', marginHorizontal: spacing[5], marginBottom: spacing[8], backgroundColor: colors.bg.surface, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border.subtle, overflow: 'hidden' },
   timerStat:   { flex: 1, alignItems: 'center', paddingVertical: spacing[4], gap: 4 },
   completeOrb: { width: 120, height: 120, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border.default, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg.elevated, marginBottom: spacing[6] },
