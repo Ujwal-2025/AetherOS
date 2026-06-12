@@ -9,11 +9,14 @@ import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { MainNavigator } from './MainNavigator';
 import { AppTourOverlay } from '../components/shared/AppTourOverlay';
 import { useUserStore } from '../store/useUserStore';
+import { useRoadmapStore } from '../store/useRoadmapStore';
 import { colors } from '../theme';
 
 export function RootNavigator() {
   const hasOnboarded = useUserStore((s) => s.hasOnboarded);
   const setOnboarded = useUserStore((s) => s.setOnboarded);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _hasPlan     = useRoadmapStore((s) => s.hasPlan); // pre-load store so MainNavigator reads current value
 
   const [phase, setPhase]     = useState<'onboarding' | 'main'>(hasOnboarded ? 'main' : 'onboarding');
   const [showTour, setShowTour] = useState(false);
