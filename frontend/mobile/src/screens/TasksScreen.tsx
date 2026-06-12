@@ -19,7 +19,7 @@ import { useWeeklyBossStore } from '../store/useWeeklyBossStore';
 import { useFocusStore } from '../store/useFocusStore';
 import { haptics } from '../utils/haptics';
 import { modeFromDuration } from '../utils/focus';
-import { Task, TaskPriority, MainTabParamList } from '../types';
+import { Task, TaskPriority, ArenaTabParamList } from '../types';
 
 type FilterKey = 'all' | 'today' | 'completed';
 type SortKey   = 'priority' | 'category' | 'dueDate';
@@ -110,8 +110,8 @@ const spStyles = StyleSheet.create({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export function TasksScreen() {
-  const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
-  const route      = useRoute<RouteProp<MainTabParamList, 'Tasks'>>();
+  const navigation = useNavigation<BottomTabNavigationProp<ArenaTabParamList>>();
+  const route      = useRoute<RouteProp<ArenaTabParamList, 'Tasks'>>();
 
   const initialFilter = route.params?.initialFilter ?? 'today';
   const [filter,     setFilter]    = useState<FilterKey>(initialFilter);

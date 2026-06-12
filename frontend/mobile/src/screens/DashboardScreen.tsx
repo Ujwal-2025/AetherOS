@@ -26,7 +26,7 @@ import { useStatsStore } from '../store/useStatsStore';
 import { useWeeklyBossStore } from '../store/useWeeklyBossStore';
 import { haptics } from '../utils/haptics';
 import { modeFromDuration } from '../utils/focus';
-import { MainTabParamList, Task, TaskPriority } from '../types';
+import { ArenaTabParamList, Task, TaskPriority } from '../types';
 
 // ─── Priority config ──────────────────────────────────────────────────────────
 
@@ -114,7 +114,7 @@ function PriorityHeader({ priority }: { priority: TaskPriority }) {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export function DashboardScreen() {
-  const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
+  const navigation = useNavigation<BottomTabNavigationProp<ArenaTabParamList>>();
 
   const { profile, rank, pendingRankUp, clearRankUp, comboMultiplier, comboCount,
           addXP, incrementTasksCompleted, incrementCombo } = useUserStore();

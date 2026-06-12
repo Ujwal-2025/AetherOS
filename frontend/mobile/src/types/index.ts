@@ -109,9 +109,39 @@ export type RootStackParamList = {
 };
 
 export type MainTabParamList = {
+  Planner: undefined;
+  Roadmap: undefined;
+  Arena:   undefined;
+};
+
+export type ArenaTabParamList = {
   Dashboard: undefined;
   Tasks:     { initialFilter?: 'today' | 'all' | 'completed' } | undefined;
   Focus:     undefined;
   System:    undefined;
   Profile:   undefined;
 };
+
+// ─── Roadmap / Planner ────────────────────────────────────────────────────────
+
+export interface RoadmapTask {
+  id:               string;
+  title:            string;
+  category:         string;
+  estimatedMinutes: number;
+}
+
+export interface RoadmapPhase {
+  id:          string;
+  title:       string;
+  description: string;
+  weekStart:   number;
+  weekEnd:     number;
+  tasks:       RoadmapTask[];
+}
+
+export interface RoadmapGoal {
+  goalId:    string;
+  goalTitle: string;
+  phases:    RoadmapPhase[];
+}
