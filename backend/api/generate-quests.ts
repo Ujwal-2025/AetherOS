@@ -25,42 +25,42 @@ export default async function handler(req: Request) {
     return new Response(JSON.stringify({ error: 'invalid json' }), { status: 400 })
   }
 
-  const apiKey = (process.env as Record<string, string>).GEMINI_API_KEY
+  // Use globalThis to access process in environments where `process` isn't defined
+  const apiKey = (globalThis as any)?.process?.env?.GROQ_API_KEY || (globalThis as any).GROQ_API_KEY
   if (!apiKey) {
     return new Response(JSON.stringify({ error: 'server misconfigured' }), { status: 500 })
   }
 
   const payload = {
-    contents: [
-      {
-        parts: [
-          { text: `${SYSTEM_PROMPT}\n\nUser goal: "${goal}"\n\nReturn JSON array only:` }
-        ]
-      }
+    model: 'llama-3.3-70b-versatile',
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user',   content: `User goal: "${goal}"\n\nReturn JSON array only:` },
     ],
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 1024,
-    }
+    temperature: 0.7,
+    max_tokens: 1024,
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+  const url = 'https://api.groq.com/openai/v1/chat/completions'
 
   try {
-    const geminiRes = await fetch(url, {
+    const groqRes = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
       body: JSON.stringify(payload),
     })
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text()
-      console.error('Gemini error:', geminiRes.status, errText)
+    if (!groqRes.ok) {
+      const errText = await groqRes.text()
+      console.error('Groq error:', groqRes.status, errText)
       return new Response(JSON.stringify({ error: 'upstream error' }), { status: 502 })
     }
 
-    const geminiData = await geminiRes.json()
-    const text = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    const groqData = await groqRes.json()
+    const text = groqData?.choices?.[0]?.message?.content ?? ''
 
     // Strip markdown fences if present
     const clean = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()

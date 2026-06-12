@@ -31,7 +31,8 @@ export default async function handler(req: Request) {
     return new Response(JSON.stringify({ error: 'invalid json' }), { status: 400, headers: CORS })
   }
 
-  const apiKey = (process.env as Record<string, string>).GROQ_API_KEY
+  // In edge/runtime environments `process` may be undefined; read from globalThis instead.
+  const apiKey = (globalThis as any).GROQ_API_KEY as string | undefined
   if (!apiKey) {
     return new Response(JSON.stringify({ error: 'server misconfigured' }), { status: 500, headers: CORS })
   }
